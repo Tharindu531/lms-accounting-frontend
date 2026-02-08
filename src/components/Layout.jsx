@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Home, BookOpen, FileQuestion, Trophy, CreditCard,
-  Users, LogOut, Menu, X, GraduationCap, BarChart3, Layers,
+  Users, LogOut, Menu, X, BarChart3, Layers,
   FolderOpen, Database, ClipboardCheck
 } from 'lucide-react';
 import { useState } from 'react';
@@ -46,7 +46,7 @@ const Layout = ({ children }) => {
       {/* Mobile header */}
       <div className="lg:hidden bg-indigo-600 text-white p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <GraduationCap size={24} />
+          <img src="/photo.webp" alt="Logo" className="w-8 h-8 rounded-full object-cover border-2 border-indigo-300" />
           <span className="font-bold">Accounting</span>
         </div>
         <button onClick={() => setSidebarOpen(!sidebarOpen)}>
@@ -64,9 +64,9 @@ const Layout = ({ children }) => {
           lg:translate-x-0
         `}>
           {/* Logo */}
-          <div className="hidden lg:flex items-center gap-2 p-6 border-b border-indigo-500">
-            <GraduationCap size={32} />
-            <span className="text-xl font-bold">Accounting with Indika Amarakoon</span>
+          <div className="hidden lg:flex items-center gap-3 p-6 border-b border-indigo-500">
+            <img src="/photo.webp" alt="Indika Amarakoon" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-300 flex-shrink-0" />
+            <span className="text-lg font-bold leading-tight">Accounting with Indika Amarakoon</span>
           </div>
 
           {/* User info */}
