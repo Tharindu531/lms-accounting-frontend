@@ -18,18 +18,19 @@ ENV VITE_API_URL=$VITE_API_URL
 # Build the application
 RUN npm run build
 
-# Production stage - simple static server
+# Production stage
 FROM node:22-alpine
 WORKDIR /app
 
-# Install serve globally
-RUN npm install -g serve
+# Install serve
+RUN npm install -g serve@14
 
 # Copy built assets from build stage
-COPY --from=build /app/dist .
+COPY --from=build /app/dist ./dist
 
 # Railway injects PORT automatically
-ENV PORT=80
+ENV PORT=3000
+EXPOSE 3000
 
-# serve -s enables SPA mode (redirects all routes to index.html)
-CMD serve -s . -l $PORT
+# serve -s = SPA mode, -p = port
+CMD ["sh", "-c", "serve -s dist -p $PORT"]
