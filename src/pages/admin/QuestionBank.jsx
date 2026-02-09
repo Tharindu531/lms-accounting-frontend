@@ -283,6 +283,32 @@ const QuestionBank = () => {
                   <p className="text-sm text-green-800">{question.correctAnswer}</p>
                 </div>
               )}
+
+              {/* Inline image preview */}
+              {question.attachments && question.attachments.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {question.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
+                    <div key={file.id} className="rounded-lg overflow-hidden border border-gray-200 max-w-xs">
+                      <img
+                        src={file.url || file.presignedUrl}
+                        alt={file.originalFileName}
+                        className="w-full max-h-48 object-contain bg-gray-50 cursor-pointer hover:opacity-90 transition"
+                        onClick={() => setViewingFile(file)}
+                      />
+                    </div>
+                  ))}
+                  {question.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
+                    <button
+                      key={file.id}
+                      onClick={() => setViewingFile(file)}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border rounded-lg hover:bg-indigo-50 transition text-sm"
+                    >
+                      <Paperclip size={14} className="text-blue-600" />
+                      {file.originalFileName}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

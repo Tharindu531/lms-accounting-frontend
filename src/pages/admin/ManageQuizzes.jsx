@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { quizAPI, unitAPI } from '../../services/api';
-import { FileQuestion, Plus, Edit2, Trash2, X, Save, PlusCircle, Wand2 } from 'lucide-react';
+import { FileQuestion, Plus, Edit2, Trash2, X, Save, PlusCircle, Wand2, Paperclip } from 'lucide-react';
+import FileViewer from '../../components/FileViewer';
 
 const ManageQuizzes = () => {
   const [quizzes, setQuizzes] = useState([]);
@@ -11,6 +12,7 @@ const ManageQuizzes = () => {
   const [showFromUnitsModal, setShowFromUnitsModal] = useState(false);
   const [editingQuiz, setEditingQuiz] = useState(null);
   const [selectedQuizForQuestion, setSelectedQuizForQuestion] = useState(null);
+  const [viewingFile, setViewingFile] = useState(null);
 
   const [quizForm, setQuizForm] = useState({
     title: '',
@@ -310,6 +312,30 @@ const ManageQuizzes = () => {
                           <p className="text-xs text-gray-500 mt-1">
                             {q.questionType !== 'WRITING' && `Correct: ${q.correctAnswer} | `}Marks: {q.marks}
                           </p>
+                          {q.attachments && q.attachments.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {q.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
+                                <div key={file.id} className="rounded overflow-hidden border border-gray-200 max-w-[200px]">
+                                  <img
+                                    src={file.url || file.presignedUrl}
+                                    alt={file.originalFileName}
+                                    className="w-full max-h-32 object-contain bg-white cursor-pointer hover:opacity-90 transition"
+                                    onClick={() => setViewingFile(file)}
+                                  />
+                                </div>
+                              ))}
+                              {q.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
+                                <button
+                                  key={file.id}
+                                  onClick={() => setViewingFile(file)}
+                                  className="flex items-center gap-1 px-2 py-1 bg-white border rounded text-xs hover:bg-indigo-50 transition"
+                                >
+                                  <Paperclip size={12} className="text-blue-600" />
+                                  {file.originalFileName}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -500,6 +526,11 @@ const ManageQuizzes = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* File Viewer Modal */}
+      {viewingFile && (
+        <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
       )}
 
       {/* Create from Units Modal */}

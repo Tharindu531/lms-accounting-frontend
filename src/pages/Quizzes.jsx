@@ -17,7 +17,6 @@ const Quizzes = () => {
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [uploading, setUploading] = useState(false);
   const [viewingFile, setViewingFile] = useState(null);
-  const [questionAttachments, setQuestionAttachments] = useState({});
 
   useEffect(() => {
     fetchQuizzes();
@@ -49,20 +48,6 @@ const Quizzes = () => {
       setResult(null);
       setStartTime(Date.now());
       setUploadedFiles({});
-
-      // Fetch attachments for each question
-      const attachmentsMap = {};
-      for (const question of quiz.questions || []) {
-        try {
-          const attachRes = await fileAPI.getQuestionAttachments(question.id);
-          if (attachRes.data.data && attachRes.data.data.length > 0) {
-            attachmentsMap[question.id] = attachRes.data.data;
-          }
-        } catch (e) {
-          // Ignore attachment errors
-        }
-      }
-      setQuestionAttachments(attachmentsMap);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to start quiz');
     }
@@ -289,28 +274,38 @@ const Quizzes = () => {
                 <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
               </div>
 
-              <p className="text-xl font-medium text-gray-800 mb-6">
+              <p className="text-xl font-medium text-gray-800 mb-4">
                 {question.questionText}
               </p>
 
-              {/* Question Attachments */}
-              {questionAttachments[question.id] && questionAttachments[question.id].length > 0 && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                    <Paperclip size={14} /> Attached Files:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {questionAttachments[question.id].map(file => (
-                      <button
-                        key={file.id}
+              {/* Question Images - displayed inline */}
+              {question.attachments && question.attachments.length > 0 && (
+                <div className="mb-6 space-y-3">
+                  {question.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
+                    <div key={file.id} className="rounded-lg overflow-hidden border border-gray-200">
+                      <img
+                        src={file.url || file.presignedUrl}
+                        alt={file.originalFileName}
+                        className="w-full max-h-96 object-contain bg-gray-50 cursor-pointer hover:opacity-90 transition"
                         onClick={() => setViewingFile(file)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-white border rounded-lg hover:bg-indigo-50 transition text-sm"
-                      >
-                        {file.fileType === 'IMAGE' ? <Image size={14} className="text-green-600" /> : <Paperclip size={14} className="text-blue-600" />}
-                        {file.originalFileName}
-                      </button>
-                    ))}
-                  </div>
+                      />
+                    </div>
+                  ))}
+                  {/* Non-image attachments as download links */}
+                  {question.attachments.filter(f => f.fileType !== 'IMAGE').length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {question.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
+                        <button
+                          key={file.id}
+                          onClick={() => setViewingFile(file)}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border rounded-lg hover:bg-indigo-50 transition text-sm"
+                        >
+                          <Paperclip size={14} className="text-blue-600" />
+                          {file.originalFileName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
