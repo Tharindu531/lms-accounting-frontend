@@ -39,7 +39,14 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     const response = await authAPI.login(credentials);
-    const { accessToken, user: userData, requirePasswordChange: reqPC } = response.data.data;
+    const result = response.data;
+
+    // Check if phone verification is required
+    if (!result.success && result.message === 'PHONE_VERIFICATION_REQUIRED') {
+      return { phoneVerificationRequired: true };
+    }
+
+    const { accessToken, user: userData, requirePasswordChange: reqPC } = result.data;
 
     localStorage.setItem('token', accessToken);
     localStorage.setItem('user', JSON.stringify(userData));
@@ -50,7 +57,7 @@ export const AuthProvider = ({ children }) => {
       setRequirePasswordChange(true);
     }
 
-    return { user: userData, requirePasswordChange: reqPC };
+    return { user: userData, requirePasswordChange: reqPC, phoneVerificationRequired: false };
   };
 
   const register = async (data) => {

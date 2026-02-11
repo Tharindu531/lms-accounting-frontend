@@ -34,22 +34,17 @@ const Login = () => {
 
       const result = await login(credentials);
 
-      if (result.requirePasswordChange) {
+      if (result.phoneVerificationRequired) {
+        setStep('otp');
+        setError('');
+        startResendCooldown();
+      } else if (result.requirePasswordChange) {
         navigate('/change-password');
       } else {
         navigate('/dashboard');
       }
     } catch (err) {
-      const message = err.response?.data?.message || 'Login failed. Please try again.';
-
-      // If phone verification required, show OTP screen
-      if (message.includes('Phone verification required') || message.includes('OTP has been sent')) {
-        setStep('otp');
-        setError('');
-        startResendCooldown();
-      } else {
-        setError(message);
-      }
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
