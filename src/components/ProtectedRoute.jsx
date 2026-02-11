@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute = ({ children, adminOnly = false }) => {
-  const { user, loading, isAdmin } = useAuth();
+  const { user, loading, isAdmin, requirePasswordChange } = useAuth();
 
   if (loading) {
     return (
@@ -14,6 +14,10 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requirePasswordChange) {
+    return <Navigate to="/change-password" replace />;
   }
 
   if (adminOnly && !isAdmin) {

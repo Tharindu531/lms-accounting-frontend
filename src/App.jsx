@@ -7,6 +7,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import VerifyEmail from './pages/VerifyEmail';
+import ChangePassword from './pages/ChangePassword';
 
 // Student pages
 import Dashboard from './pages/Dashboard';
@@ -35,6 +36,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/change-password" element={<ChangePassword />} />
 
           {/* Protected routes */}
           <Route

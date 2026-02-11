@@ -6,13 +6,18 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [requirePasswordChange, setRequirePasswordChange] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
+    const savedRequirePC = localStorage.getItem('requirePasswordChange');
 
     if (token && savedUser) {
       setUser(JSON.parse(savedUser));
+      if (savedRequirePC === 'true') {
+        setRequirePasswordChange(true);
+      }
       // Verify token is still valid
       authAPI.getMe()
         .then(res => {
@@ -22,7 +27,9 @@ export const AuthProvider = ({ children }) => {
         .catch(() => {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('requirePasswordChange');
           setUser(null);
+          setRequirePasswordChange(false);
         })
         .finally(() => setLoading(false));
     } else {
@@ -32,13 +39,18 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     const response = await authAPI.login(credentials);
-    const { accessToken, user: userData } = response.data.data;
+    const { accessToken, user: userData, requirePasswordChange: reqPC } = response.data.data;
 
     localStorage.setItem('token', accessToken);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
 
-    return userData;
+    if (reqPC) {
+      localStorage.setItem('requirePasswordChange', 'true');
+      setRequirePasswordChange(true);
+    }
+
+    return { user: userData, requirePasswordChange: reqPC };
   };
 
   const register = async (data) => {
@@ -46,10 +58,25 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
+  const changePassword = async (currentPassword, newPassword) => {
+    const response = await authAPI.changePassword({ currentPassword, newPassword });
+    const { accessToken, user: userData } = response.data.data;
+
+    localStorage.setItem('token', accessToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.removeItem('requirePasswordChange');
+    setUser(userData);
+    setRequirePasswordChange(false);
+
+    return userData;
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('requirePasswordChange');
     setUser(null);
+    setRequirePasswordChange(false);
   };
 
   const isAdmin = user?.userType === 'ADMIN';
@@ -62,9 +89,11 @@ export const AuthProvider = ({ children }) => {
       login,
       register,
       logout,
+      changePassword,
       isAdmin,
       isStudent,
-      isAuthenticated: !!user
+      isAuthenticated: !!user,
+      requirePasswordChange
     }}>
       {children}
     </AuthContext.Provider>

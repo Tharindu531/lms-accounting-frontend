@@ -43,6 +43,7 @@ export const authAPI = {
   verifyEmail: (token) => api.get('/auth/verify-email', { params: { token } }),
   verifyPhone: (data) => api.post('/auth/verify-phone', data),
   resendPhoneOtp: (phone) => api.post('/auth/resend-phone-otp', null, { params: { phone } }),
+  changePassword: (data) => api.post('/auth/change-password', data),
 };
 
 // Payment APIs
