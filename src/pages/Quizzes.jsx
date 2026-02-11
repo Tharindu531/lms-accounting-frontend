@@ -333,7 +333,7 @@ const Quizzes = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {['A', 'B', 'C', 'D'].map((option) => (
+                  {['A', 'B', 'C', 'D', 'E'].map((option) => (
                     <button
                       key={option}
                       onClick={() => handleAnswer(question.id, option)}

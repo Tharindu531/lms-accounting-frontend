@@ -28,6 +28,7 @@ const ManageQuizzes = () => {
     optionB: '',
     optionC: '',
     optionD: '',
+    optionE: '',
     correctAnswer: 'A',
     marks: 1
   });
@@ -100,6 +101,7 @@ const ManageQuizzes = () => {
       optionB: '',
       optionC: '',
       optionD: '',
+      optionE: '',
       correctAnswer: 'A',
       marks: 1
     });
@@ -153,6 +155,7 @@ const ManageQuizzes = () => {
       data.optionB = null;
       data.optionC = null;
       data.optionD = null;
+      data.optionE = null;
     }
 
     try {
@@ -462,7 +465,7 @@ const ManageQuizzes = () => {
 
               {questionForm.questionType === 'MCQ' && (
                 <>
-                  {['A', 'B', 'C', 'D'].map((option) => (
+                  {['A', 'B', 'C', 'D', 'E'].map((option) => (
                     <div key={option}>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Option {option} *</label>
                       <input
@@ -482,7 +485,7 @@ const ManageQuizzes = () => {
                       onChange={(e) => setQuestionForm({ ...questionForm, correctAnswer: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                     >
-                      {['A', 'B', 'C', 'D'].map(opt => (
+                      {['A', 'B', 'C', 'D', 'E'].map(opt => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>

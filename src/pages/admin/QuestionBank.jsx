@@ -23,6 +23,7 @@ const QuestionBank = () => {
     optionB: '',
     optionC: '',
     optionD: '',
+    optionE: '',
     correctAnswer: 'A',
     marks: 1,
     unitId: ''
@@ -100,6 +101,7 @@ const QuestionBank = () => {
         optionB: question.optionB || '',
         optionC: question.optionC || '',
         optionD: question.optionD || '',
+        optionE: question.optionE || '',
         correctAnswer: question.correctAnswer || 'A',
         marks: question.marks || 1,
         unitId: question.unitId || ''
@@ -114,6 +116,7 @@ const QuestionBank = () => {
         optionB: '',
         optionC: '',
         optionD: '',
+        optionE: '',
         correctAnswer: 'A',
         marks: 1,
         unitId: filterUnitId || ''
@@ -137,6 +140,7 @@ const QuestionBank = () => {
       data.optionB = null;
       data.optionC = null;
       data.optionD = null;
+      data.optionE = null;
     }
 
     try {
@@ -262,7 +266,7 @@ const QuestionBank = () => {
 
               {question.questionType !== 'WRITING' && (
                 <div className="grid grid-cols-2 gap-2 mt-3">
-                  {['A', 'B', 'C', 'D'].map(opt => (
+                  {['A', 'B', 'C', 'D', 'E'].map(opt => (
                     <div
                       key={opt}
                       className={`p-2 rounded text-sm ${
@@ -369,7 +373,7 @@ const QuestionBank = () => {
 
               {form.questionType === 'MCQ' && (
                 <>
-                  {['A', 'B', 'C', 'D'].map((option) => (
+                  {['A', 'B', 'C', 'D', 'E'].map((option) => (
                     <div key={option}>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Option {option} *</label>
                       <input
@@ -389,7 +393,7 @@ const QuestionBank = () => {
                       onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                     >
-                      {['A', 'B', 'C', 'D'].map(opt => (
+                      {['A', 'B', 'C', 'D', 'E'].map(opt => (
                         <option key={opt} value={opt}>{opt}</option>
                       ))}
                     </select>

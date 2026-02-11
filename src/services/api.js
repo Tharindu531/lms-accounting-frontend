@@ -41,6 +41,8 @@ export const authAPI = {
   login: (data) => api.post('/auth/login', data),
   getMe: () => api.get('/auth/me'),
   verifyEmail: (token) => api.get('/auth/verify-email', { params: { token } }),
+  verifyPhone: (data) => api.post('/auth/verify-phone', data),
+  resendPhoneOtp: (phone) => api.post('/auth/resend-phone-otp', null, { params: { phone } }),
 };
 
 // Payment APIs
