@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { quizAPI, fileAPI } from '../services/api';
-import { FileQuestion, Clock, CheckCircle, Play, AlertTriangle, Trophy, Sparkles, AlertCircle, PenLine, Upload, Paperclip, Image } from 'lucide-react';
+import {
+  FileQuestion, Clock, CheckCircle, Play, AlertTriangle, Trophy, Sparkles,
+  AlertCircle, PenLine, Paperclip, Eye, Upload, Image, FileText,
+} from 'lucide-react';
 import FileViewer from '../components/FileViewer';
 
 const Quizzes = () => {
@@ -14,11 +17,19 @@ const Quizzes = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [startTime, setStartTime] = useState(null);
-  const [uploadedFiles, setUploadedFiles] = useState({});
-  const [uploading, setUploading] = useState(false);
   const [viewingFile, setViewingFile] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(null); // seconds remaining, null = no timer
+
+  // Timer
+  const [timeLeft, setTimeLeft] = useState(null);
   const [timedOut, setTimedOut] = useState(false);
+
+  // Post-submission file upload (per writing question)
+  const [quizMarksId, setQuizMarksId] = useState(null);
+  const [answerFiles, setAnswerFiles] = useState({});      // { questionId: [file objects] }
+  const [uploadingFor, setUploadingFor] = useState(null);  // questionId currently uploading
+
+  // Review mode (viewing a past, already-submitted quiz)
+  const [reviewLoading, setReviewLoading] = useState(null); // quizId being loaded
 
   useEffect(() => {
     fetchQuizzes();
@@ -27,12 +38,7 @@ const Quizzes = () => {
   // Countdown tick
   useEffect(() => {
     if (timeLeft === null) return;
-
-    if (timeLeft === 0) {
-      setTimedOut(true);
-      return;
-    }
-
+    if (timeLeft === 0) { setTimedOut(true); return; }
     const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
     return () => clearTimeout(id);
   }, [timeLeft]);
@@ -69,7 +75,8 @@ const Quizzes = () => {
       setAnswers({});
       setResult(null);
       setStartTime(Date.now());
-      setUploadedFiles({});
+      setQuizMarksId(null);
+      setAnswerFiles({});
       setTimedOut(false);
       setTimeLeft(quiz.timeLimit > 0 ? quiz.timeLimit * 60 : null);
     } catch (err) {
@@ -91,21 +98,64 @@ const Quizzes = () => {
       }
     }
 
-    setTimeLeft(null); // Stop the timer
+    setTimeLeft(null);
     setSubmitting(true);
     try {
       const timeTaken = Math.floor((Date.now() - startTime) / 1000);
-      const response = await quizAPI.submit({
-        quizId: selectedQuiz,
-        answers,
-        timeTaken
-      });
-      setResult(response.data.data);
+      const response = await quizAPI.submit({ quizId: selectedQuiz, answers, timeTaken });
+      const resultData = response.data.data;
+      setResult(resultData);
+      setQuizMarksId(resultData.quizMarksId);
       fetchQuizzes();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to submit quiz');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Load a past quiz result for review
+  const reviewQuiz = async (quizId) => {
+    setReviewLoading(quizId);
+    try {
+      const res = await quizAPI.getMyQuizResult(quizId);
+      const resultData = res.data.data;
+      setResult(resultData);
+      setQuizMarksId(resultData.quizMarksId);
+
+      // Fetch uploaded answer files for all writing questions
+      const files = {};
+      for (const detail of resultData.answerDetails || []) {
+        if (detail.questionType === 'WRITING' && resultData.quizMarksId) {
+          try {
+            const fileRes = await fileAPI.getAnswerAttachments(resultData.quizMarksId, detail.questionId);
+            if (fileRes.data.data?.length > 0) {
+              files[detail.questionId] = fileRes.data.data;
+            }
+          } catch (_) { /* attachment errors are non-fatal */ }
+        }
+      }
+      setAnswerFiles(files);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to load quiz result');
+    } finally {
+      setReviewLoading(null);
+    }
+  };
+
+  // Upload a file for a writing answer (only available on result screen right after submission)
+  const handleAnswerFileUpload = async (questionId, file) => {
+    if (!quizMarksId) return;
+    setUploadingFor(questionId);
+    try {
+      await fileAPI.uploadForAnswer(quizMarksId, questionId, file);
+      // Refresh the file list for this question
+      const res = await fileAPI.getAnswerAttachments(quizMarksId, questionId);
+      setAnswerFiles(prev => ({ ...prev, [questionId]: res.data.data || [] }));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Upload failed. Only images and PDFs up to 20 MB are allowed.');
+    } finally {
+      setUploadingFor(null);
     }
   };
 
@@ -117,23 +167,22 @@ const Quizzes = () => {
     setAnswers({});
     setResult(null);
     setCurrentQuestion(0);
+    setQuizMarksId(null);
+    setAnswerFiles({});
   };
 
-  // Format seconds as M:SS
   const formatTime = (seconds) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Timer badge color based on remaining fraction
-  const getTimerClasses = () => {
-    if (timeLeft === null || !quizData?.timeLimit) return '';
-    const fraction = timeLeft / (quizData.timeLimit * 60);
-    if (fraction > 0.5) return 'bg-green-50 text-green-700 border-green-200';
-    if (fraction > 0.25) return 'bg-amber-50 text-amber-700 border-amber-200';
-    return 'bg-red-50 text-red-700 border-red-200 animate-pulse';
+  const getTimerFraction = () => {
+    if (timeLeft === null || !quizData?.timeLimit) return 1;
+    return timeLeft / (quizData.timeLimit * 60);
   };
+
+  // ─── Loading / Error ────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -155,8 +204,11 @@ const Quizzes = () => {
     );
   }
 
-  // Show result
+  // ─── Result / Review Screen ─────────────────────────────────────────────────
+
   if (result) {
+    const isReview = !quizData; // if quizData is null we came via the Review button
+
     const getPerformanceDisplay = () => {
       if (!result.markingComplete) {
         return {
@@ -164,25 +216,25 @@ const Quizzes = () => {
           bg: 'bg-orange-100',
           iconColor: 'text-orange-600',
           title: 'Marking in Progress',
-          message: `${result.pendingMarkingCount} writing question(s) pending review`
+          message: `${result.pendingMarkingCount} writing question(s) pending review`,
         };
       }
-      if (result.performanceLevel === 'EXCELLENT' || result.percentage >= 80) {
+      if (result.percentage >= 80) {
         return {
           icon: <Sparkles size={48} />,
           bg: 'bg-green-100',
           iconColor: 'text-green-600',
           title: 'Excellent!',
-          message: 'Outstanding performance! Keep up the great work!'
+          message: 'Outstanding performance! Keep up the great work!',
         };
       }
-      if (result.performanceLevel === 'GOOD' || result.percentage >= 50) {
+      if (result.percentage >= 50) {
         return {
           icon: <Trophy size={48} />,
           bg: 'bg-yellow-100',
           iconColor: 'text-yellow-600',
           title: 'Good Job!',
-          message: 'Good effort! A little more practice will make it perfect.'
+          message: 'Good effort! A little more practice will make it perfect.',
         };
       }
       return {
@@ -190,7 +242,7 @@ const Quizzes = () => {
         bg: 'bg-red-100',
         iconColor: 'text-red-600',
         title: 'Needs Improvement',
-        message: 'Keep working hard! Review the material and try again.'
+        message: 'Keep working hard! Review the material and try again.',
       };
     };
 
@@ -198,92 +250,89 @@ const Quizzes = () => {
 
     return (
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-          <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${performance.bg}`}>
-            <span className={performance.iconColor}>{performance.icon}</span>
+        <div className="bg-white rounded-xl shadow-sm p-8">
+          {/* Performance header */}
+          <div className="text-center mb-8">
+            <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${performance.bg}`}>
+              <span className={performance.iconColor}>{performance.icon}</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800 mb-1">{performance.title}</h1>
+            <p className="text-gray-500 mb-1">{result.quizTitle}</p>
+            <p className="text-sm text-gray-400">{performance.message}</p>
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">{performance.title}</h1>
-          <p className="text-gray-500 mb-2">{result.quizTitle}</p>
-          <p className="text-sm text-gray-400 mb-6">{performance.message}</p>
-
+          {/* Score grid */}
           <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-indigo-600">
                 {result.markingComplete ? `${result.percentage.toFixed(1)}%` : 'Pending'}
               </p>
-              <p className="text-gray-500">Score</p>
+              <p className="text-gray-500 text-sm">Score</p>
             </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-3xl font-bold text-indigo-600">{result.correctAnswers}/{result.totalQuestions}</p>
-              <p className="text-gray-500">Correct</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
               <p className="text-3xl font-bold text-indigo-600">{result.obtainedMarks}/{result.totalMarks}</p>
-              <p className="text-gray-500">Marks</p>
+              <p className="text-gray-500 text-sm">Marks</p>
             </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-3xl font-bold text-indigo-600">{Math.floor(result.timeTaken / 60)}:{(result.timeTaken % 60).toString().padStart(2, '0')}</p>
-              <p className="text-gray-500">Time Taken</p>
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <p className="text-3xl font-bold text-indigo-600">{result.correctAnswers}/{result.totalQuestions}</p>
+              <p className="text-gray-500 text-sm">Correct</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <p className="text-3xl font-bold text-indigo-600">
+                {Math.floor(result.timeTaken / 60)}:{(result.timeTaken % 60).toString().padStart(2, '0')}
+              </p>
+              <p className="text-gray-500 text-sm">Time Taken</p>
             </div>
           </div>
 
+          {/* Upload hint for writing questions (only immediately after submission) */}
+          {!isReview && result.answerDetails?.some(d => d.questionType === 'WRITING') && (
+            <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg flex items-start gap-3">
+              <Upload size={18} className="text-indigo-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-indigo-800">Support your writing answers</p>
+                <p className="text-xs text-indigo-600 mt-0.5">
+                  You can upload images or PDFs for each writing question below. The admin will see them when marking.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Answer Review */}
-          <div className="text-left mb-8">
+          <div className="mb-8">
             <h3 className="font-semibold text-gray-800 mb-4">Answer Review</h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {result.answerDetails?.map((detail, index) => (
-                <div key={detail.questionId} className={`p-4 rounded-lg ${
-                  detail.markingStatus === 'PENDING' ? 'bg-orange-50' :
-                  detail.isCorrect ? 'bg-green-50' : 'bg-red-50'
-                }`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="font-medium text-gray-800">
-                      {index + 1}. {detail.questionText}
-                    </p>
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      detail.questionType === 'WRITING' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {detail.questionType || 'MCQ'}
-                    </span>
-                  </div>
-
-                  {detail.markingStatus === 'PENDING' ? (
-                    <p className="text-orange-600">
-                      Your answer: {detail.selectedAnswer || 'Not answered'} - Awaiting manual marking
-                    </p>
-                  ) : (
-                    <p className={detail.isCorrect ? 'text-green-600' : 'text-red-600'}>
-                      Your answer: {detail.selectedAnswer || 'Not answered'}
-                      {detail.questionType !== 'WRITING' && !detail.isCorrect && ` (Correct: ${detail.correctAnswer})`}
-                      {detail.questionType === 'WRITING' && detail.adminMarks !== undefined && (
-                        <span className="ml-2">- Marks: {detail.adminMarks}/{detail.maxMarks}</span>
-                      )}
-                    </p>
-                  )}
-
-                  {detail.adminComment && (
-                    <p className="mt-2 text-sm text-gray-600 italic">
-                      Feedback: {detail.adminComment}
-                    </p>
-                  )}
-                </div>
+                <AnswerDetailCard
+                  key={detail.questionId}
+                  detail={detail}
+                  index={index}
+                  isReview={isReview}
+                  markingComplete={result.markingComplete}
+                  uploadedFiles={answerFiles[detail.questionId] || []}
+                  uploadingFor={uploadingFor}
+                  onUpload={handleAnswerFileUpload}
+                  onViewFile={setViewingFile}
+                />
               ))}
             </div>
           </div>
 
           <button
             onClick={resetQuiz}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
           >
             Back to Quizzes
           </button>
         </div>
+
+        {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
       </div>
     );
   }
 
-  // Show quiz questions
+  // ─── Active Quiz ────────────────────────────────────────────────────────────
+
   if (quizData) {
     const question = quizData.questions[currentQuestion];
     const progress = ((currentQuestion + 1) / quizData.questions.length) * 100;
@@ -293,11 +342,38 @@ const Quizzes = () => {
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           {/* Progress bar */}
           <div className="h-2 bg-gray-200">
-            <div
-              className="h-full bg-indigo-600 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-full bg-indigo-600 transition-all duration-300" style={{ width: `${progress}%` }} />
           </div>
+
+          {/* Timer bar — shown when quiz has a time limit */}
+          {timeLeft !== null && (() => {
+            const fraction = getTimerFraction();
+            const isLow = fraction <= 0.25;
+            const isMedium = fraction <= 0.5 && fraction > 0.25;
+            const barBg = isLow ? 'bg-red-600' : isMedium ? 'bg-amber-500' : 'bg-green-600';
+            const trackBg = isLow ? 'bg-red-200' : isMedium ? 'bg-amber-200' : 'bg-green-200';
+            return (
+              <div className={`${isLow ? 'bg-red-50' : isMedium ? 'bg-amber-50' : 'bg-green-50'} border-b ${isLow ? 'border-red-200' : isMedium ? 'border-amber-200' : 'border-green-200'}`}>
+                {/* Shrinking progress track */}
+                <div className={`h-1 w-full ${trackBg}`}>
+                  <div
+                    className={`h-full ${barBg} transition-all duration-1000 ${isLow ? 'animate-pulse' : ''}`}
+                    style={{ width: `${fraction * 100}%` }}
+                  />
+                </div>
+                {/* Time display */}
+                <div className="flex items-center justify-center gap-3 py-2">
+                  <Clock size={16} className={isLow ? 'text-red-600' : isMedium ? 'text-amber-600' : 'text-green-600'} />
+                  <span className={`font-mono font-bold text-lg ${isLow ? 'text-red-700 animate-pulse' : isMedium ? 'text-amber-700' : 'text-green-700'}`}>
+                    {formatTime(timeLeft)}
+                  </span>
+                  <span className={`text-xs ${isLow ? 'text-red-500' : isMedium ? 'text-amber-500' : 'text-green-500'}`}>
+                    remaining
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Time's up banner */}
           {timedOut && (
@@ -308,39 +384,29 @@ const Quizzes = () => {
           )}
 
           <div className="p-6">
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800">{quizData.title}</h2>
-              <div className="flex items-center gap-3">
-                {timeLeft !== null && (
-                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold text-sm ${getTimerClasses()}`}>
-                    <Clock size={15} />
-                    {formatTime(timeLeft)}
-                  </div>
-                )}
-                <span className="text-gray-500 text-sm">
-                  {currentQuestion + 1} / {quizData.questions.length}
-                </span>
-              </div>
+              <span className="text-gray-500 text-sm">{currentQuestion + 1} / {quizData.questions.length}</span>
             </div>
 
+            {/* Question */}
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-4">
                 <span className={`px-2 py-0.5 text-xs rounded-full ${
                   question.questionType === 'WRITING' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                 }`}>
-                  {question.questionType === 'WRITING' ? (
-                    <span className="flex items-center gap-1"><PenLine size={12} /> Writing</span>
-                  ) : 'MCQ'}
+                  {question.questionType === 'WRITING'
+                    ? <span className="flex items-center gap-1"><PenLine size={12} /> Writing</span>
+                    : 'MCQ'}
                 </span>
                 <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
               </div>
 
-              <p className="text-xl font-medium text-gray-800 mb-4">
-                {question.questionText}
-              </p>
+              <p className="text-xl font-medium text-gray-800 mb-4">{question.questionText}</p>
 
-              {/* Question Images - displayed inline */}
-              {question.attachments && question.attachments.length > 0 && (
+              {/* Question attachments */}
+              {question.attachments?.length > 0 && (
                 <div className="mb-6 space-y-3">
                   {question.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
                     <div key={file.id} className="rounded-lg overflow-hidden border border-gray-200">
@@ -352,7 +418,6 @@ const Quizzes = () => {
                       />
                     </div>
                   ))}
-                  {/* Non-image attachments as download links */}
                   {question.attachments.filter(f => f.fileType !== 'IMAGE').length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {question.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
@@ -370,48 +435,38 @@ const Quizzes = () => {
                 </div>
               )}
 
+              {/* Answer input */}
               {question.questionType === 'WRITING' ? (
-                <div className="space-y-4">
-                  <textarea
-                    value={answers[question.id] || ''}
-                    onChange={(e) => handleAnswer(question.id, e.target.value)}
-                    className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition resize-none"
-                    rows={6}
-                    placeholder="Type your answer here..."
-                  />
-
-                  {/* File upload for writing answers - shown after submission */}
-                  {uploadedFiles[question.id] && uploadedFiles[question.id].length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {uploadedFiles[question.id].map((file, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm flex items-center gap-1">
-                          <Paperclip size={12} />
-                          {file.name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <textarea
+                  value={answers[question.id] || ''}
+                  onChange={(e) => handleAnswer(question.id, e.target.value)}
+                  className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition resize-none"
+                  rows={6}
+                  placeholder="Type your answer here..."
+                />
               ) : (
                 <div className="space-y-3">
                   {['A', 'B', 'C', 'D', 'E'].map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => handleAnswer(question.id, option)}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition ${
-                        answers[question.id] === option
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-gray-200 hover:border-indigo-300'
-                      }`}
-                    >
-                      <span className="font-medium text-indigo-600 mr-3">{option}.</span>
-                      {question[`option${option}`]}
-                    </button>
+                    question[`option${option}`] && (
+                      <button
+                        key={option}
+                        onClick={() => handleAnswer(question.id, option)}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition ${
+                          answers[question.id] === option
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-gray-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        <span className="font-medium text-indigo-600 mr-3">{option}.</span>
+                        {question[`option${option}`]}
+                      </button>
+                    )
                   ))}
                 </div>
               )}
             </div>
 
+            {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
@@ -459,17 +514,17 @@ const Quizzes = () => {
           </div>
         </div>
 
-        <button
-          onClick={resetQuiz}
-          className="mt-4 text-gray-500 hover:text-gray-700"
-        >
+        <button onClick={resetQuiz} className="mt-4 text-gray-500 hover:text-gray-700">
           Cancel Quiz
         </button>
+
+        {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
       </div>
     );
   }
 
-  // Show quiz list
+  // ─── Quiz List ──────────────────────────────────────────────────────────────
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Available Quizzes</h1>
@@ -486,19 +541,14 @@ const Quizzes = () => {
             <div key={quiz.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
-                  <div className={`p-2 rounded-lg ${
-                    quiz.attempted ? 'bg-green-100' : 'bg-indigo-100'
-                  }`}>
-                    {quiz.attempted ? (
-                      <CheckCircle className="text-green-600" size={24} />
-                    ) : (
-                      <FileQuestion className="text-indigo-600" size={24} />
-                    )}
+                  <div className={`p-2 rounded-lg ${quiz.attempted ? 'bg-green-100' : 'bg-indigo-100'}`}>
+                    {quiz.attempted
+                      ? <CheckCircle className="text-green-600" size={24} />
+                      : <FileQuestion className="text-indigo-600" size={24} />}
                   </div>
                   {quiz.timeLimit > 0 && (
                     <span className="flex items-center gap-1 text-sm text-gray-500">
-                      <Clock size={16} />
-                      {quiz.timeLimit} min
+                      <Clock size={16} />{quiz.timeLimit} min
                     </span>
                   )}
                 </div>
@@ -512,10 +562,22 @@ const Quizzes = () => {
                 </div>
 
                 {quiz.attempted ? (
-                  <div className="bg-green-50 rounded-lg p-3 text-center">
-                    <p className="text-green-700 font-medium">
-                      Completed - Score: {quiz.score?.toFixed(1)}%
-                    </p>
+                  <div className="space-y-2">
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <p className="text-green-700 font-medium">
+                        {quiz.score != null ? `Completed — Score: ${quiz.score.toFixed(1)}%` : 'Completed — Marking Pending'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => reviewQuiz(quiz.id)}
+                      disabled={reviewLoading === quiz.id}
+                      className="w-full flex items-center justify-center gap-2 py-2 border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50 transition text-sm disabled:opacity-50"
+                    >
+                      {reviewLoading === quiz.id
+                        ? <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600" />
+                        : <Eye size={16} />}
+                      {reviewLoading === quiz.id ? 'Loading...' : 'Review Answers'}
+                    </button>
                   </div>
                 ) : (
                   <button
@@ -532,9 +594,148 @@ const Quizzes = () => {
         </div>
       )}
 
-      {/* File Viewer Modal */}
-      {viewingFile && (
-        <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
+      {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
+    </div>
+  );
+};
+
+// ─── Answer Detail Card ─────────────────────────────────────────────────────
+
+const AnswerDetailCard = ({
+  detail, index, isReview, markingComplete,
+  uploadedFiles, uploadingFor, onUpload, onViewFile,
+}) => {
+  const isPending = detail.markingStatus === 'PENDING';
+  const isWriting = detail.questionType === 'WRITING';
+
+  const cardBg = isPending
+    ? 'bg-orange-50 border-orange-200'
+    : detail.isCorrect
+      ? 'bg-green-50 border-green-200'
+      : 'bg-red-50 border-red-200';
+
+  return (
+    <div className={`p-4 rounded-xl border-2 ${cardBg}`}>
+      {/* Question header */}
+      <div className="flex items-start justify-between mb-3">
+        <p className="font-medium text-gray-800 pr-4">
+          {index + 1}. {detail.questionText}
+        </p>
+        <span className={`flex-shrink-0 px-2 py-0.5 text-xs rounded-full ${
+          isWriting ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+        }`}>
+          {isWriting ? 'Writing' : 'MCQ'}
+        </span>
+      </div>
+
+      {/* MCQ result */}
+      {!isWriting && (
+        <div className="space-y-1">
+          <p className={detail.isCorrect ? 'text-green-700' : 'text-red-700'}>
+            Your answer: <strong>{detail.selectedAnswer || 'Not answered'}</strong>
+            {!detail.isCorrect && detail.correctAnswer && (
+              <span className="ml-2 text-gray-600">
+                (Correct: <strong>{detail.correctAnswer}</strong>)
+              </span>
+            )}
+          </p>
+          <p className="text-sm text-gray-500">
+            {detail.isCorrect ? `+${detail.maxMarks} mark(s)` : '0 marks'}
+          </p>
+        </div>
+      )}
+
+      {/* Writing result */}
+      {isWriting && (
+        <div className="space-y-3">
+          {/* Student's typed answer */}
+          <div className="bg-white p-3 rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-500 font-medium mb-1">Your Answer:</p>
+            <p className="text-gray-800 whitespace-pre-wrap text-sm">
+              {detail.selectedAnswer || <span className="italic text-gray-400">No answer provided</span>}
+            </p>
+          </div>
+
+          {/* Uploaded files */}
+          {uploadedFiles.length > 0 && (
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-2 flex items-center gap-1">
+                <Paperclip size={12} /> Uploaded Files:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {uploadedFiles.map(file => (
+                  <button
+                    key={file.id}
+                    onClick={() => onViewFile(file)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 transition text-sm"
+                  >
+                    {file.fileType === 'IMAGE'
+                      ? <Image size={14} className="text-green-600" />
+                      : <FileText size={14} className="text-blue-600" />}
+                    <span className="max-w-[160px] truncate">{file.originalFileName}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upload button — only shown right after submission, not in review mode */}
+          {!isReview && (
+            <label className={`flex items-center gap-2 px-4 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition ${
+              uploadingFor === detail.questionId
+                ? 'border-indigo-400 bg-indigo-50 opacity-70'
+                : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50'
+            }`}>
+              <Upload size={16} className="text-gray-400 flex-shrink-0" />
+              <span className="text-sm text-gray-500">
+                {uploadingFor === detail.questionId ? 'Uploading...' : 'Upload image or PDF'}
+              </span>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                disabled={uploadingFor === detail.questionId}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) onUpload(detail.questionId, e.target.files[0]);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+
+          {/* Admin marks & feedback */}
+          {detail.markingStatus === 'MARKED' && (
+            <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-lg">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Admin Review</p>
+                <span className="text-sm font-bold text-indigo-800">
+                  {detail.adminMarks ?? 0} / {detail.maxMarks} marks
+                </span>
+              </div>
+              {detail.adminComment ? (
+                <p className="text-sm text-indigo-800 italic">"{detail.adminComment}"</p>
+              ) : (
+                <p className="text-xs text-indigo-500">No comment left.</p>
+              )}
+            </div>
+          )}
+
+          {/* Pending notice */}
+          {isPending && (
+            <div className="flex items-center gap-2 text-orange-600 text-sm">
+              <AlertCircle size={14} />
+              Awaiting admin marking
+            </div>
+          )}
+
+          {/* Reference answer — shown when quiz is fully marked */}
+          {markingComplete && detail.correctAnswer && (
+            <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
+              <p className="text-xs text-gray-500 font-medium mb-1">Reference Answer:</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.correctAnswer}</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

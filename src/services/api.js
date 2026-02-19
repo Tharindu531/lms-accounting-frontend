@@ -74,6 +74,7 @@ export const quizAPI = {
   getForAttempt: (id) => api.get(`/quizzes/${id}/attempt`),
   submit: (data) => api.post('/quizzes/submit', data),
   getMyResults: () => api.get('/quizzes/my-results'),
+  getMyQuizResult: (quizId) => api.get(`/quizzes/my-results/${quizId}`),
   // Admin
   getAllAdmin: () => api.get('/quizzes/admin/all'),
   create: (data) => api.post('/quizzes', data),
