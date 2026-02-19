@@ -17,10 +17,32 @@ const Quizzes = () => {
   const [uploadedFiles, setUploadedFiles] = useState({});
   const [uploading, setUploading] = useState(false);
   const [viewingFile, setViewingFile] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null); // seconds remaining, null = no timer
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
     fetchQuizzes();
   }, []);
+
+  // Countdown tick
+  useEffect(() => {
+    if (timeLeft === null) return;
+
+    if (timeLeft === 0) {
+      setTimedOut(true);
+      return;
+    }
+
+    const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [timeLeft]);
+
+  // Auto-submit when timer reaches zero
+  useEffect(() => {
+    if (timedOut && !submitting && !result) {
+      submitQuiz(true); // eslint-disable-line react-hooks/exhaustive-deps
+    }
+  }, [timedOut]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchQuizzes = async () => {
     try {
@@ -48,6 +70,8 @@ const Quizzes = () => {
       setResult(null);
       setStartTime(Date.now());
       setUploadedFiles({});
+      setTimedOut(false);
+      setTimeLeft(quiz.timeLimit > 0 ? quiz.timeLimit * 60 : null);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to start quiz');
     }
@@ -57,14 +81,17 @@ const Quizzes = () => {
     setAnswers({ ...answers, [questionId]: answer });
   };
 
-  const submitQuiz = async () => {
-    const unanswered = quizData.questions.filter(q => !answers[q.id]);
-    if (unanswered.length > 0) {
-      if (!confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`)) {
-        return;
+  const submitQuiz = async (isAutoSubmit = false) => {
+    if (!isAutoSubmit) {
+      const unanswered = quizData.questions.filter(q => !answers[q.id]);
+      if (unanswered.length > 0) {
+        if (!confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`)) {
+          return;
+        }
       }
     }
 
+    setTimeLeft(null); // Stop the timer
     setSubmitting(true);
     try {
       const timeTaken = Math.floor((Date.now() - startTime) / 1000);
@@ -74,7 +101,7 @@ const Quizzes = () => {
         timeTaken
       });
       setResult(response.data.data);
-      fetchQuizzes(); // Refresh to update attempted status
+      fetchQuizzes();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to submit quiz');
     } finally {
@@ -83,11 +110,29 @@ const Quizzes = () => {
   };
 
   const resetQuiz = () => {
+    setTimeLeft(null);
+    setTimedOut(false);
     setSelectedQuiz(null);
     setQuizData(null);
     setAnswers({});
     setResult(null);
     setCurrentQuestion(0);
+  };
+
+  // Format seconds as M:SS
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Timer badge color based on remaining fraction
+  const getTimerClasses = () => {
+    if (timeLeft === null || !quizData?.timeLimit) return '';
+    const fraction = timeLeft / (quizData.timeLimit * 60);
+    if (fraction > 0.5) return 'bg-green-50 text-green-700 border-green-200';
+    if (fraction > 0.25) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-red-50 text-red-700 border-red-200 animate-pulse';
   };
 
   if (loading) {
@@ -254,12 +299,28 @@ const Quizzes = () => {
             />
           </div>
 
+          {/* Time's up banner */}
+          {timedOut && (
+            <div className="bg-red-600 px-6 py-3 flex items-center gap-2 text-white">
+              <AlertTriangle size={16} className="flex-shrink-0" />
+              <span className="font-semibold">Time's up! Submitting your answers...</span>
+            </div>
+          )}
+
           <div className="p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800">{quizData.title}</h2>
-              <span className="text-gray-500">
-                Question {currentQuestion + 1} of {quizData.questions.length}
-              </span>
+              <div className="flex items-center gap-3">
+                {timeLeft !== null && (
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-mono font-bold text-sm ${getTimerClasses()}`}>
+                    <Clock size={15} />
+                    {formatTime(timeLeft)}
+                  </div>
+                )}
+                <span className="text-gray-500 text-sm">
+                  {currentQuestion + 1} / {quizData.questions.length}
+                </span>
+              </div>
             </div>
 
             <div className="mb-8">
@@ -380,7 +441,7 @@ const Quizzes = () => {
 
               {currentQuestion === quizData.questions.length - 1 ? (
                 <button
-                  onClick={submitQuiz}
+                  onClick={() => submitQuiz(false)}
                   disabled={submitting}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                 >
