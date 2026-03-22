@@ -4,10 +4,13 @@ import { BookOpen, Plus, Edit2, Trash2, X, Save, Upload, Paperclip, Video, FileT
 import FileUpload, { FileList } from '../../components/FileUpload';
 import FileViewer from '../../components/FileViewer';
 
+const ITEMS_PER_PAGE = 20;
+
 const ManageLessons = () => {
   const [lessons, setLessons] = useState([]);
   const [units, setUnits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
   const [editingLesson, setEditingLesson] = useState(null);
   const [attachments, setAttachments] = useState([]);
@@ -197,7 +200,7 @@ const ManageLessons = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {lessons.map((lesson) => (
+              {lessons.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE).map((lesson) => (
                 <tr key={lesson.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-gray-600">
                     #{lesson.displayOrder}
@@ -254,6 +257,32 @@ const ManageLessons = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {Math.ceil(lessons.length / ITEMS_PER_PAGE) > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-gray-500">
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, lessons.length)} of {lessons.length} lessons
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-600">Page {currentPage} of {Math.ceil(lessons.length / ITEMS_PER_PAGE)}</span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(Math.ceil(lessons.length / ITEMS_PER_PAGE), p + 1))}
+              disabled={currentPage === Math.ceil(lessons.length / ITEMS_PER_PAGE)}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

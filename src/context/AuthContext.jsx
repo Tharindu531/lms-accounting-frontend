@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
+import { getToken, setToken, clearToken } from '../services/tokenStore';
+
+export { getToken, setToken, clearToken };
 
 const AuthContext = createContext(null);
 
@@ -9,29 +12,16 @@ export const AuthProvider = ({ children }) => {
   const [requirePasswordChange, setRequirePasswordChange] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // Only restore non-sensitive user info from localStorage
     const savedUser = localStorage.getItem('user');
     const savedRequirePC = localStorage.getItem('requirePasswordChange');
 
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
-      if (savedRequirePC === 'true') {
-        setRequirePasswordChange(true);
-      }
-      // Verify token is still valid
-      authAPI.getMe()
-        .then(res => {
-          setUser(res.data.data);
-          localStorage.setItem('user', JSON.stringify(res.data.data));
-        })
-        .catch(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('requirePasswordChange');
-          setUser(null);
-          setRequirePasswordChange(false);
-        })
-        .finally(() => setLoading(false));
+    if (savedUser) {
+      // We have a previous session; verify with server (token not in localStorage)
+      // Try to restore session by calling /auth/me - this will fail without a token,
+      // so we treat the absence of an in-memory token as logged out.
+      // If the page was refreshed, inMemoryToken is gone - user must log in again.
+      setLoading(false);
     } else {
       setLoading(false);
     }
@@ -48,7 +38,9 @@ export const AuthProvider = ({ children }) => {
 
     const { accessToken, user: userData, requirePasswordChange: reqPC } = result.data;
 
-    localStorage.setItem('token', accessToken);
+    // Store token in memory only - not localStorage
+    setToken(accessToken);
+    // Store only non-sensitive user info in localStorage for UI persistence
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
 
@@ -69,7 +61,8 @@ export const AuthProvider = ({ children }) => {
     const response = await authAPI.changePassword({ currentPassword, newPassword });
     const { accessToken, user: userData } = response.data.data;
 
-    localStorage.setItem('token', accessToken);
+    // Update in-memory token
+    setToken(accessToken);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.removeItem('requirePasswordChange');
     setUser(userData);
@@ -79,7 +72,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    clearToken();
     localStorage.removeItem('user');
     localStorage.removeItem('requirePasswordChange');
     setUser(null);
@@ -99,7 +92,7 @@ export const AuthProvider = ({ children }) => {
       changePassword,
       isAdmin,
       isStudent,
-      isAuthenticated: !!user,
+      isAuthenticated: !!user && !!getToken(),
       requirePasswordChange
     }}>
       {children}

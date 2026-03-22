@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getToken, clearToken } from './tokenStore';
 
 let API_URL = import.meta.env.VITE_API_URL || '/api';
 // Ensure the URL has a protocol so it's not treated as a relative path
@@ -13,9 +14,9 @@ const api = axios.create({
   },
 });
 
-// Add token to requests
+// Add token to requests - use in-memory token, not localStorage
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -27,7 +28,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
+      clearToken();
       localStorage.removeItem('user');
       window.location.href = '/login';
     }

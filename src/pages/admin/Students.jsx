@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { userAPI, batchAPI } from '../../services/api';
 import { Users, Search, Mail, Hash, Plus, X, Phone, AlertCircle, CheckCircle } from 'lucide-react';
 
+const ITEMS_PER_PAGE = 20;
+
 const Students = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBatch, setFilterBatch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Add Student Modal
   const [showModal, setShowModal] = useState(false);
@@ -61,6 +64,17 @@ const Students = () => {
 
     return matchesSearch && matchesBatch;
   });
+
+  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handleFilterChange = (setter) => (e) => {
+    setter(e.target.value);
+    setCurrentPage(1);
+  };
 
   const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a, b) => a - b);
 
@@ -150,13 +164,13 @@ const Students = () => {
               type="text"
               placeholder="Search by ID, name, email, or phone..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleFilterChange(setSearchTerm)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
             />
           </div>
           <select
             value={filterBatch}
-            onChange={(e) => setFilterBatch(e.target.value)}
+            onChange={handleFilterChange(setFilterBatch)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
           >
             <option value="">All Batches</option>
@@ -186,7 +200,7 @@ const Students = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredStudents.map((student) => (
+              {paginatedStudents.map((student) => (
                 <tr key={student.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded text-gray-700">
@@ -243,6 +257,48 @@ const Students = () => {
           </table>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-gray-500">
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} students
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+              .map((page, idx, arr) => (
+                <span key={page}>
+                  {idx > 0 && arr[idx - 1] !== page - 1 && <span className="px-1 text-gray-400">...</span>}
+                  <button
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium ${
+                      currentPage === page
+                        ? 'bg-indigo-600 text-white'
+                        : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                </span>
+              ))}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add Student Modal */}
       {showModal && (
