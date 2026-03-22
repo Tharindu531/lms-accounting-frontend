@@ -126,8 +126,8 @@ const ManageUnits = () => {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{unit.description}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${unit.active !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {unit.active !== false ? 'Active' : 'Inactive'}
+                    <span className={`px-2 py-1 text-xs rounded-full ${unit.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {unit.isActive !== false ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { quizAPI, fileAPI } from '../services/api';
 import {
   FileQuestion, Clock, CheckCircle, Play, AlertTriangle, Trophy, Sparkles,
@@ -30,6 +30,9 @@ const Quizzes = () => {
 
   // Review mode (viewing a past, already-submitted quiz)
   const [reviewLoading, setReviewLoading] = useState(null); // quizId being loaded
+
+  // Ref to prevent double-submit (race condition between button click and auto-submit)
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     fetchQuizzes();
@@ -89,6 +92,7 @@ const Quizzes = () => {
   };
 
   const submitQuiz = async (isAutoSubmit = false) => {
+    if (submittingRef.current) return; // prevent double submit
     if (!isAutoSubmit) {
       const unanswered = quizData.questions.filter(q => !answers[q.id]);
       if (unanswered.length > 0) {
@@ -98,6 +102,7 @@ const Quizzes = () => {
       }
     }
 
+    submittingRef.current = true;
     setTimeLeft(null);
     setSubmitting(true);
     try {
@@ -110,6 +115,7 @@ const Quizzes = () => {
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to submit quiz');
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

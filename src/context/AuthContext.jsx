@@ -12,17 +12,33 @@ export const AuthProvider = ({ children }) => {
   const [requirePasswordChange, setRequirePasswordChange] = useState(false);
 
   useEffect(() => {
-    // Only restore non-sensitive user info from localStorage
     const savedUser = localStorage.getItem('user');
-    const savedRequirePC = localStorage.getItem('requirePasswordChange');
+    const savedToken = sessionStorage.getItem('_t');
 
-    if (savedUser) {
-      // We have a previous session; verify with server (token not in localStorage)
-      // Try to restore session by calling /auth/me - this will fail without a token,
-      // so we treat the absence of an in-memory token as logged out.
-      // If the page was refreshed, inMemoryToken is gone - user must log in again.
-      setLoading(false);
+    if (savedUser && savedToken) {
+      // Restore token to memory store
+      setToken(savedToken);
+      // Validate token is still valid by calling /auth/me
+      authAPI.getMe()
+        .then(() => {
+          setUser(JSON.parse(savedUser));
+          const savedRequirePC = localStorage.getItem('requirePasswordChange');
+          if (savedRequirePC === 'true') {
+            setRequirePasswordChange(true);
+          }
+        })
+        .catch(() => {
+          // Token expired or invalid - clear everything
+          clearToken();
+          localStorage.removeItem('user');
+          localStorage.removeItem('requirePasswordChange');
+          sessionStorage.removeItem('_t');
+        })
+        .finally(() => setLoading(false));
     } else {
+      // No session - clear any stale data
+      clearToken();
+      localStorage.removeItem('user');
       setLoading(false);
     }
   }, []);
@@ -72,7 +88,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    clearToken();
+    clearToken(); // also clears sessionStorage._t via updated clearToken()
     localStorage.removeItem('user');
     localStorage.removeItem('requirePasswordChange');
     setUser(null);
