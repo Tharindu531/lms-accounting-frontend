@@ -46,12 +46,16 @@ const Quizzes = () => {
     return () => clearTimeout(id);
   }, [timeLeft]);
 
+  // Keep a ref to submitQuiz so the timer effect always calls the latest version
+  const submitQuizRef = useRef(null);
+  submitQuizRef.current = submitQuiz;
+
   // Auto-submit when timer reaches zero
   useEffect(() => {
     if (timedOut && !submitting && !result) {
-      submitQuiz(true); // eslint-disable-line react-hooks/exhaustive-deps
+      submitQuizRef.current(true);
     }
-  }, [timedOut]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [timedOut, submitting, result]);
 
   const fetchQuizzes = async () => {
     try {
@@ -94,7 +98,7 @@ const Quizzes = () => {
   const submitQuiz = async (isAutoSubmit = false) => {
     if (submittingRef.current) return; // prevent double submit
     if (!isAutoSubmit) {
-      const unanswered = quizData.questions.filter(q => !answers[q.id]);
+      const unanswered = (quizData?.questions ?? []).filter(q => !answers[q.id]);
       if (unanswered.length > 0) {
         if (!confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`)) {
           return;
@@ -340,8 +344,11 @@ const Quizzes = () => {
   // ─── Active Quiz ────────────────────────────────────────────────────────────
 
   if (quizData) {
-    const question = quizData.questions[currentQuestion];
-    const progress = ((currentQuestion + 1) / quizData.questions.length) * 100;
+    const questions = quizData.questions ?? [];
+    const question = questions[currentQuestion] ?? questions[0];
+    const progress = questions.length > 0 ? ((currentQuestion + 1) / questions.length) * 100 : 0;
+
+    if (!question) return null; // no active questions — should not happen after backend fix
 
     return (
       <div className="max-w-2xl mx-auto">
@@ -393,7 +400,7 @@ const Quizzes = () => {
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800">{quizData.title}</h2>
-              <span className="text-gray-500 text-sm">{currentQuestion + 1} / {quizData.questions.length}</span>
+              <span className="text-gray-500 text-sm">{currentQuestion + 1} / {questions.length}</span>
             </div>
 
             {/* Question */}
@@ -483,14 +490,14 @@ const Quizzes = () => {
               </button>
 
               <div className="flex gap-2">
-                {quizData.questions.map((_, index) => (
+                {questions.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => setCurrentQuestion(index)}
                     className={`w-8 h-8 rounded-full text-sm font-medium ${
                       index === currentQuestion
                         ? 'bg-indigo-600 text-white'
-                        : answers[quizData.questions[index].id]
+                        : answers[questions[index].id]
                           ? 'bg-green-100 text-green-700'
                           : 'bg-gray-100 text-gray-600'
                     }`}
@@ -500,7 +507,7 @@ const Quizzes = () => {
                 ))}
               </div>
 
-              {currentQuestion === quizData.questions.length - 1 ? (
+              {currentQuestion === questions.length - 1 ? (
                 <button
                   onClick={() => submitQuiz(false)}
                   disabled={submitting}
