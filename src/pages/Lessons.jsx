@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { lessonAPI, fileAPI } from '../services/api';
-import { BookOpen, Play, CheckCircle, AlertTriangle, FileText, Video, Paperclip, Image, ChevronDown, ChevronRight } from 'lucide-react';
+import { BookOpen, Play, CheckCircle, AlertTriangle, FileText, Video, Paperclip, Image, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import FileViewer from '../components/FileViewer';
 
 const Lessons = () => {
@@ -38,11 +38,7 @@ const Lessons = () => {
       });
       setExpandedUnits(units);
     } catch (err) {
-      if (err.response?.status === 402) {
-        setError('Payment required to access lessons. Please complete your payment for the current month.');
-      } else {
-        setError('Failed to load lessons');
-      }
+      setError('Failed to load lessons');
     } finally {
       setLoading(false);
     }
@@ -127,6 +123,11 @@ const Lessons = () => {
   }, [selectedLesson?.id, selectedLesson?.youtubeLink, handleLessonComplete]);
 
   const selectLesson = async (lesson) => {
+    if (lesson.locked) {
+      setSelectedLesson(lesson);
+      setAttachments([]);
+      return;
+    }
     setSelectedLesson(lesson);
     try {
       const response = await fileAPI.getLessonAttachments(lesson.id);
@@ -135,6 +136,8 @@ const Lessons = () => {
       setAttachments([]);
     }
   };
+
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   const getLessonTypeIcon = (lesson) => {
     if (lesson.lessonType === 'VIDEO') return <Video size={16} className="text-red-500" />;
@@ -234,12 +237,14 @@ const Lessons = () => {
                           onClick={() => selectLesson(lesson)}
                           className={`flex items-center gap-3 p-3 cursor-pointer transition hover:bg-gray-50 border-b border-gray-50 last:border-b-0 ${
                             selectedLesson?.id === lesson.id ? 'bg-indigo-50 border-l-3 border-l-indigo-500' : ''
-                          }`}
+                          } ${lesson.locked ? 'opacity-60' : ''}`}
                         >
                           <div className={`p-1.5 rounded-lg flex-shrink-0 ${
-                            lesson.completed ? 'bg-green-100' : 'bg-gray-100'
+                            lesson.locked ? 'bg-amber-100' : lesson.completed ? 'bg-green-100' : 'bg-gray-100'
                           }`}>
-                            {lesson.completed ? (
+                            {lesson.locked ? (
+                              <Lock className="text-amber-600" size={16} />
+                            ) : lesson.completed ? (
                               <CheckCircle className="text-green-600" size={16} />
                             ) : (
                               getLessonTypeIcon(lesson)
@@ -247,10 +252,17 @@ const Lessons = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <h3 className="text-sm font-medium text-gray-800 truncate">{lesson.lessonName}</h3>
-                            <p className="text-xs text-gray-500 truncate">{lesson.lessonDescription}</p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {lesson.locked
+                                ? `Requires payment for ${MONTH_NAMES[(lesson.month || 1) - 1]}`
+                                : lesson.lessonDescription}
+                            </p>
                           </div>
-                          {lesson.completed && (
+                          {!lesson.locked && lesson.completed && (
                             <CheckCircle className="text-green-500 flex-shrink-0" size={16} />
+                          )}
+                          {lesson.locked && (
+                            <Lock className="text-amber-400 flex-shrink-0" size={14} />
                           )}
                         </div>
                       ))}
@@ -263,7 +275,19 @@ const Lessons = () => {
 
           {/* Lesson Content */}
           <div className="lg:col-span-2">
-            {selectedLesson ? (
+            {selectedLesson?.locked ? (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <Lock className="mx-auto text-amber-400 mb-4" size={48} />
+                <h2 className="text-xl font-semibold text-gray-700 mb-2">{selectedLesson.lessonName}</h2>
+                <p className="text-gray-500">
+                  This lesson requires payment for{' '}
+                  <span className="font-semibold text-amber-600">
+                    {MONTH_NAMES[(selectedLesson.month || 1) - 1]}
+                  </span>.
+                </p>
+                <p className="text-sm text-gray-400 mt-2">Please complete your payment to access this content.</p>
+              </div>
+            ) : selectedLesson ? (
               <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                 {/* Video Section - YouTube IFrame Player API */}
                 {hasVideoContent && (

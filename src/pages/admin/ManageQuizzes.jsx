@@ -18,7 +18,8 @@ const ManageQuizzes = () => {
     title: '',
     description: '',
     accessibleBatches: '',
-    timeLimit: 0
+    timeLimit: 0,
+    month: ''
   });
 
   const [questionForm, setQuestionForm] = useState({
@@ -78,7 +79,8 @@ const ManageQuizzes = () => {
         title: quiz.title,
         description: quiz.description || '',
         accessibleBatches: Array.from(quiz.accessibleBatches || []).join(', '),
-        timeLimit: quiz.timeLimit || 0
+        timeLimit: quiz.timeLimit || 0,
+        month: quiz.month != null ? String(quiz.month) : ''
       });
     } else {
       setEditingQuiz(null);
@@ -86,7 +88,8 @@ const ManageQuizzes = () => {
         title: '',
         description: '',
         accessibleBatches: '',
-        timeLimit: 0
+        timeLimit: 0,
+        month: ''
       });
     }
     setShowQuizModal(true);
@@ -129,7 +132,8 @@ const ManageQuizzes = () => {
       accessibleBatches: quizForm.accessibleBatches
         .split(',')
         .map(b => parseInt(b.trim()))
-        .filter(b => !isNaN(b))
+        .filter(b => !isNaN(b)),
+      month: quizForm.month ? parseInt(quizForm.month) : null
     };
 
     try {
@@ -292,6 +296,11 @@ const ManageQuizzes = () => {
                       Batch {batch}
                     </span>
                   ))}
+                  {quiz.month && (
+                    <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">
+                      {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][quiz.month - 1]}
+                    </span>
+                  )}
                 </div>
 
                 {/* Questions List */}
@@ -411,6 +420,23 @@ const ManageQuizzes = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                   min={0}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Month (optional)
+                </label>
+                <select
+                  value={quizForm.month}
+                  onChange={(e) => setQuizForm({ ...quizForm, month: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                >
+                  <option value="">No restriction</option>
+                  {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
+                    <option key={i + 1} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Students must have paid for the selected month to attempt this quiz.</p>
               </div>
 
               <div className="flex justify-end gap-3 pt-4">

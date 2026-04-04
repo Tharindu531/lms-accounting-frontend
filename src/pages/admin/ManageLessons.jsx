@@ -22,7 +22,8 @@ const ManageLessons = () => {
     content: '',
     unitId: '',
     accessibleBatches: '',
-    displayOrder: 0
+    displayOrder: 0,
+    month: ''
   });
 
   useEffect(() => {
@@ -72,7 +73,8 @@ const ManageLessons = () => {
         content: lesson.content || '',
         unitId: lesson.unitId || '',
         accessibleBatches: Array.from(lesson.accessibleBatches || []).join(', '),
-        displayOrder: lesson.displayOrder || 0
+        displayOrder: lesson.displayOrder || 0,
+        month: lesson.month != null ? String(lesson.month) : ''
       });
       await fetchAttachments(lesson.id);
     } else {
@@ -84,7 +86,8 @@ const ManageLessons = () => {
         content: '',
         unitId: '',
         accessibleBatches: '',
-        displayOrder: lessons.length
+        displayOrder: lessons.length,
+        month: ''
       });
       setAttachments([]);
     }
@@ -126,7 +129,8 @@ const ManageLessons = () => {
       accessibleBatches: formData.accessibleBatches
         .split(',')
         .map(b => parseInt(b.trim()))
-        .filter(b => !isNaN(b))
+        .filter(b => !isNaN(b)),
+      month: formData.month ? parseInt(formData.month) : null
     };
 
     try {
@@ -226,6 +230,11 @@ const ManageLessons = () => {
                           Batch {batch}
                         </span>
                       ))}
+                      {lesson.month && (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">
+                          {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lesson.month - 1]}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -386,6 +395,23 @@ const ManageLessons = () => {
                   placeholder="1, 2, 3"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Month (optional)
+                </label>
+                <select
+                  value={formData.month}
+                  onChange={(e) => setFormData({ ...formData, month: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                >
+                  <option value="">No restriction</option>
+                  {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
+                    <option key={i + 1} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Students must have paid for the selected month to access this lesson.</p>
               </div>
 
               {/* File Upload Section */}

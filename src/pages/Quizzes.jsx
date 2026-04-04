@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { quizAPI, fileAPI } from '../services/api';
 import {
   FileQuestion, Clock, CheckCircle, Play, AlertTriangle, Trophy, Sparkles,
-  AlertCircle, PenLine, Paperclip, Eye, Upload, Image, FileText,
+  AlertCircle, PenLine, Paperclip, Eye, Upload, Image, FileText, Lock,
 } from 'lucide-react';
 import FileViewer from '../components/FileViewer';
 
@@ -56,16 +56,14 @@ const Quizzes = () => {
     }
   }, [timedOut, submitting, result]);
 
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
   const fetchQuizzes = async () => {
     try {
       const response = await quizAPI.getAll();
       setQuizzes(response.data.data || []);
     } catch (err) {
-      if (err.response?.status === 402) {
-        setError('Payment required to access quizzes.');
-      } else {
-        setError('Failed to load quizzes');
-      }
+      setError('Failed to load quizzes');
     } finally {
       setLoading(false);
     }
@@ -550,19 +548,28 @@ const Quizzes = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {quizzes.map((quiz) => (
-            <div key={quiz.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div key={quiz.id} className={`bg-white rounded-xl shadow-sm overflow-hidden ${quiz.locked ? 'opacity-70' : ''}`}>
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
-                  <div className={`p-2 rounded-lg ${quiz.attempted ? 'bg-green-100' : 'bg-indigo-100'}`}>
-                    {quiz.attempted
-                      ? <CheckCircle className="text-green-600" size={24} />
-                      : <FileQuestion className="text-indigo-600" size={24} />}
+                  <div className={`p-2 rounded-lg ${quiz.locked ? 'bg-amber-100' : quiz.attempted ? 'bg-green-100' : 'bg-indigo-100'}`}>
+                    {quiz.locked
+                      ? <Lock className="text-amber-600" size={24} />
+                      : quiz.attempted
+                        ? <CheckCircle className="text-green-600" size={24} />
+                        : <FileQuestion className="text-indigo-600" size={24} />}
                   </div>
-                  {quiz.timeLimit > 0 && (
-                    <span className="flex items-center gap-1 text-sm text-gray-500">
-                      <Clock size={16} />{quiz.timeLimit} min
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {quiz.month && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${quiz.locked ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                        {MONTH_NAMES[quiz.month - 1]}
+                      </span>
+                    )}
+                    {quiz.timeLimit > 0 && (
+                      <span className="flex items-center gap-1 text-sm text-gray-500">
+                        <Clock size={16} />{quiz.timeLimit} min
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">{quiz.title}</h3>
@@ -573,7 +580,14 @@ const Quizzes = () => {
                   <span>{quiz.totalMarks} marks</span>
                 </div>
 
-                {quiz.attempted ? (
+                {quiz.locked ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                    <p className="text-amber-700 text-sm font-medium flex items-center justify-center gap-2">
+                      <Lock size={14} />
+                      Requires payment for {MONTH_NAMES[quiz.month - 1]}
+                    </p>
+                  </div>
+                ) : quiz.attempted ? (
                   <div className="space-y-2">
                     <div className="bg-green-50 rounded-lg p-3 text-center">
                       <p className="text-green-700 font-medium">

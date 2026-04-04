@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 import { batchAPI, authAPI } from '../services/api';
 import { Mail, Lock, User, Layers, AlertCircle, CheckCircle, Phone } from 'lucide-react';
+import PhoneInput from '../components/PhoneInput';
 
 const Register = () => {
   const [regMethod, setRegMethod] = useState('email');
@@ -384,18 +385,11 @@ const Register = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Phone Number
                 </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                    placeholder="e.g. +94771234567"
-                    required
-                  />
-                </div>
+                <PhoneInput
+                  onChange={(full) => setFormData(prev => ({ ...prev, phone: full }))}
+                  required
+                  placeholder="771234567"
+                />
               </div>
             )}
 
