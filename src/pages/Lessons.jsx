@@ -57,7 +57,7 @@ const Lessons = () => {
 
   const getYouTubeVideoId = (url) => {
     if (!url) return null;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?\/\s]{11})/);
+    const match = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/v\/|\/watch\?v=|\/watch\?.+&v=))([^"&?/\s]{11})/);
     return match ? match[1] : null;
   };
 
@@ -131,7 +131,7 @@ const Lessons = () => {
     try {
       const response = await fileAPI.getLessonAttachments(lesson.id);
       setAttachments(response.data.data || []);
-    } catch (err) {
+    } catch {
       setAttachments([]);
     }
   };
@@ -164,7 +164,6 @@ const Lessons = () => {
   });
 
   const hasVideoContent = selectedLesson?.youtubeLink;
-  const isVideoOnly = selectedLesson?.lessonType === 'VIDEO';
 
   if (loading) {
     return (

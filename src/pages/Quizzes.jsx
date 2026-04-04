@@ -16,7 +16,6 @@ const Quizzes = () => {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
-  const [startTime, setStartTime] = useState(null);
   const [viewingFile, setViewingFile] = useState(null);
 
   // Timer
@@ -81,7 +80,6 @@ const Quizzes = () => {
       setCurrentQuestion(0);
       setAnswers({});
       setResult(null);
-      setStartTime(Date.now());
       setQuizMarksId(null);
       setAnswerFiles({});
       setTimedOut(false);
@@ -110,8 +108,7 @@ const Quizzes = () => {
     setTimeLeft(null);
     setSubmitting(true);
     try {
-      const timeTaken = Math.floor((Date.now() - startTime) / 1000);
-      const response = await quizAPI.submit({ quizId: selectedQuiz, answers, timeTaken });
+      const response = await quizAPI.submit({ quizId: selectedQuiz, answers });
       const resultData = response.data.data;
       setResult(resultData);
       setQuizMarksId(resultData.quizMarksId);
@@ -134,17 +131,19 @@ const Quizzes = () => {
       setQuizMarksId(resultData.quizMarksId);
 
       // Fetch uploaded answer files for all writing questions
-      const files = {};
-      for (const detail of resultData.answerDetails || []) {
-        if (detail.questionType === 'WRITING' && resultData.quizMarksId) {
-          try {
-            const fileRes = await fileAPI.getAnswerAttachments(resultData.quizMarksId, detail.questionId);
-            if (fileRes.data.data?.length > 0) {
-              files[detail.questionId] = fileRes.data.data;
+      const fileEntries = await Promise.all(
+        (resultData.answerDetails || [])
+          .filter((detail) => detail.questionType === 'WRITING' && resultData.quizMarksId)
+          .map(async (detail) => {
+            try {
+              const fileRes = await fileAPI.getAnswerAttachments(resultData.quizMarksId, detail.questionId);
+              return [detail.questionId, fileRes.data.data || []];
+            } catch {
+              return [detail.questionId, []];
             }
-          } catch (_) { /* attachment errors are non-fatal */ }
-        }
-      }
+          })
+      );
+      const files = Object.fromEntries(fileEntries.filter(([, fileList]) => fileList.length > 0));
       setAnswerFiles(files);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to load quiz result');

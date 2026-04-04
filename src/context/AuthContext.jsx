@@ -1,10 +1,13 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { authAPI } from '../services/api';
 import { getToken, setToken, clearToken } from '../services/tokenStore';
-
-export { getToken, setToken, clearToken };
-
-const AuthContext = createContext(null);
+import {
+  clearStoredSession,
+  loadRequirePasswordChange,
+  loadStoredUser,
+  storeUserSession,
+} from '../services/authSession';
+import AuthContext from './AuthContextStore';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -12,35 +15,48 @@ export const AuthProvider = ({ children }) => {
   const [requirePasswordChange, setRequirePasswordChange] = useState(false);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    const savedToken = sessionStorage.getItem('_t');
+    let cancelled = false;
 
-    if (savedUser && savedToken) {
-      // Restore token to memory store
-      setToken(savedToken);
-      // Validate token is still valid by calling /auth/me
-      authAPI.getMe()
-        .then(() => {
-          setUser(JSON.parse(savedUser));
-          const savedRequirePC = localStorage.getItem('requirePasswordChange');
-          if (savedRequirePC === 'true') {
-            setRequirePasswordChange(true);
-          }
-        })
-        .catch(() => {
-          // Token expired or invalid - clear everything
+    const initializeAuth = async () => {
+      const savedUser = loadStoredUser();
+      const savedToken = getToken();
+
+      if (!savedUser || !savedToken) {
+        clearToken();
+        clearStoredSession();
+        if (!cancelled) {
+          setUser(null);
+          setRequirePasswordChange(false);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        await authAPI.getMe();
+        if (!cancelled) {
+          setUser(savedUser);
+          setRequirePasswordChange(loadRequirePasswordChange());
+        }
+      } catch {
+        if (!cancelled) {
           clearToken();
-          localStorage.removeItem('user');
-          localStorage.removeItem('requirePasswordChange');
-          sessionStorage.removeItem('_t');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      // No session - clear any stale data
-      clearToken();
-      localStorage.removeItem('user');
-      setLoading(false);
-    }
+          clearStoredSession();
+          setUser(null);
+          setRequirePasswordChange(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (credentials) => {
@@ -54,16 +70,10 @@ export const AuthProvider = ({ children }) => {
 
     const { accessToken, user: userData, requirePasswordChange: reqPC } = result.data;
 
-    // Store token in memory only - not localStorage
     setToken(accessToken);
-    // Store only non-sensitive user info in localStorage for UI persistence
-    localStorage.setItem('user', JSON.stringify(userData));
+    storeUserSession(userData, reqPC);
     setUser(userData);
-
-    if (reqPC) {
-      localStorage.setItem('requirePasswordChange', 'true');
-      setRequirePasswordChange(true);
-    }
+    setRequirePasswordChange(!!reqPC);
 
     return { user: userData, requirePasswordChange: reqPC, phoneVerificationRequired: false };
   };
@@ -77,10 +87,8 @@ export const AuthProvider = ({ children }) => {
     const response = await authAPI.changePassword({ currentPassword, newPassword });
     const { accessToken, user: userData } = response.data.data;
 
-    // Update in-memory token
     setToken(accessToken);
-    localStorage.setItem('user', JSON.stringify(userData));
-    localStorage.removeItem('requirePasswordChange');
+    storeUserSession(userData, false);
     setUser(userData);
     setRequirePasswordChange(false);
 
@@ -88,9 +96,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    clearToken(); // also clears sessionStorage._t via updated clearToken()
-    localStorage.removeItem('user');
-    localStorage.removeItem('requirePasswordChange');
+    clearToken();
+    clearStoredSession();
     setUser(null);
     setRequirePasswordChange(false);
   };
@@ -114,12 +121,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

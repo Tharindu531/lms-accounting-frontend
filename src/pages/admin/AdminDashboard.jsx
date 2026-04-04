@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BarChart3, Trophy, Users, BookOpen } from 'lucide-react';
 import { adminDashboardAPI } from '../../services/api';
 import DashboardFilters from '../../components/dashboard/DashboardFilters';
@@ -24,14 +24,15 @@ const AdminDashboard = () => {
     { id: 'lessons', label: 'Lesson Progress', icon: BookOpen },
   ];
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       switch (activeTab) {
-        case 'overview':
+        case 'overview': {
           const overviewRes = await adminDashboardAPI.getOverview(filters);
           setOverviewData(overviewRes.data.data);
           break;
+        }
         case 'leaderboard':
           if (filters.quizId) {
             const leaderboardRes = await adminDashboardAPI.getLeaderboard(filters.quizId, filters);
@@ -40,13 +41,17 @@ const AdminDashboard = () => {
             setLeaderboardData([]);
           }
           break;
-        case 'students':
+        case 'students': {
           const studentsRes = await adminDashboardAPI.getStudentResults(filters);
           setStudentResultsData(studentsRes.data.data);
           break;
-        case 'lessons':
+        }
+        case 'lessons': {
           const lessonsRes = await adminDashboardAPI.getLessonProgress(filters);
           setLessonProgressData(lessonsRes.data.data);
+          break;
+        }
+        default:
           break;
       }
     } catch (error) {
@@ -54,11 +59,11 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, filters]);
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, filters]);
+  }, [fetchData]);
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);

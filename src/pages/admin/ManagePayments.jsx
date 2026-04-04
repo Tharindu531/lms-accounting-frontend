@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { paymentAPI, userAPI } from '../../services/api';
 import { CreditCard, Plus, Search, X, Save, Trash2, Calendar } from 'lucide-react';
 
@@ -19,11 +19,7 @@ const ManagePayments = () => {
     notes: ''
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [selectedYear, selectedMonth]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [paymentsRes, studentsRes] = await Promise.all([
         paymentAPI.getByMonth(selectedYear, selectedMonth),
@@ -36,7 +32,11 @@ const ManagePayments = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const openModal = () => {
     setFormData({
@@ -71,6 +71,7 @@ const ManagePayments = () => {
       await paymentAPI.delete(id);
       fetchData();
     } catch (err) {
+      console.error('Failed to delete payment:', err);
       alert('Failed to delete payment');
     }
   };

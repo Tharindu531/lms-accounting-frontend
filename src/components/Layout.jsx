@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import useAuth from '../context/useAuth';
 import {
   Home, BookOpen, FileQuestion, Trophy, CreditCard,
   Users, LogOut, Menu, X, BarChart3, Layers,
@@ -83,22 +83,25 @@ const Layout = ({ children }) => {
 
           {/* Navigation */}
           <nav className="p-4 space-y-1">
-            {links.map(({ to, icon: Icon, label }) => (
+            {links.map((link) => {
+              const IconComponent = link.icon;
+              return (
               <Link
-                key={to}
-                to={to}
+                key={link.to}
+                to={link.to}
                 onClick={() => setSidebarOpen(false)}
                 className={`
                   flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                  ${location.pathname === to
+                  ${location.pathname === link.to
                     ? 'bg-indigo-700 text-white'
                     : 'text-indigo-100 hover:bg-indigo-500'}
                 `}
               >
-                <Icon size={20} />
-                {label}
+                <IconComponent size={20} />
+                {link.label}
               </Link>
-            ))}
+              );
+            })}
           </nav>
 
           {/* Logout */}

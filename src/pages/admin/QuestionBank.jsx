@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { quizAPI, unitAPI, fileAPI } from '../../services/api';
 import { HelpCircle, Plus, Edit2, Trash2, X, Save, Filter, BarChart3, Upload, Paperclip } from 'lucide-react';
 import FileUpload, { FileList } from '../../components/FileUpload';
@@ -29,11 +29,7 @@ const QuestionBank = () => {
     unitId: ''
   });
 
-  useEffect(() => {
-    fetchData();
-  }, [filterUnitId]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [questionsRes, unitsRes] = await Promise.all([
@@ -47,7 +43,11 @@ const QuestionBank = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterUnitId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const fetchStats = async () => {
     try {
@@ -73,12 +73,8 @@ const QuestionBank = () => {
       alert('Please save the question first before uploading files.');
       return;
     }
-    try {
-      await fileAPI.uploadForQuestion(editingQuestion.id, file);
-      await fetchAttachments(editingQuestion.id);
-    } catch (err) {
-      throw err;
-    }
+    await fileAPI.uploadForQuestion(editingQuestion.id, file);
+    await fetchAttachments(editingQuestion.id);
   };
 
   const handleFileDelete = async (attachmentId) => {
@@ -87,6 +83,7 @@ const QuestionBank = () => {
       await fileAPI.delete(attachmentId);
       await fetchAttachments(editingQuestion.id);
     } catch (err) {
+      console.error('Failed to delete file:', err);
       alert('Failed to delete file');
     }
   };
@@ -167,6 +164,7 @@ const QuestionBank = () => {
       await quizAPI.deleteBankQuestion(id);
       fetchData();
     } catch (err) {
+      console.error('Failed to delete question:', err);
       alert('Failed to delete question');
     }
   };

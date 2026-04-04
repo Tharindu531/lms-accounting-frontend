@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import useAuth from '../context/useAuth';
 import { batchAPI, authAPI } from '../services/api';
 import { Mail, Lock, User, Layers, AlertCircle, CheckCircle, Phone } from 'lucide-react';
 
@@ -28,7 +28,6 @@ const Register = () => {
   const otpRefs = useRef([]);
 
   const { register } = useAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetchBatches();

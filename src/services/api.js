@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getToken, clearToken } from './tokenStore';
+import { clearStoredSession } from './authSession';
 
 // Base URL is the Railway origin only — all paths include /api explicitly.
 // DO NOT add /api here: axios drops the baseURL path when request paths start with /
@@ -30,8 +31,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       clearToken();
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      clearStoredSession();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
     }
     return Promise.reject(error);
   }

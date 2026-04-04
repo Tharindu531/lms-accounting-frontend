@@ -51,12 +51,13 @@ const AdminMarking = () => {
           if (attachRes.data.data && attachRes.data.data.length > 0) {
             attachmentsMap[answer.questionId] = attachRes.data.data;
           }
-        } catch (e) {
+        } catch {
           // Ignore attachment errors
         }
       }
       setAnswerAttachments(attachmentsMap);
     } catch (err) {
+      console.error('Failed to load submission details:', err);
       alert('Failed to load submission details');
     }
   };

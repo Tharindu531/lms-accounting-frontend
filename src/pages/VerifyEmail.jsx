@@ -9,22 +9,37 @@ const VerifyEmail = () => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    if (!token) {
-      setStatus('error');
-      setMessage('Invalid verification link. No token provided.');
-      return;
-    }
+    let cancelled = false;
 
-    authAPI.verifyEmail(token)
-      .then((res) => {
-        setStatus('success');
-        setMessage(res.data?.message || 'Email verified successfully.');
-      })
-      .catch((err) => {
-        setStatus('error');
-        setMessage(err.response?.data?.message || 'Verification failed. Please try again.');
-      });
+    const verify = async () => {
+      const token = searchParams.get('token');
+      if (!token) {
+        if (!cancelled) {
+          setStatus('error');
+          setMessage('Invalid verification link. No token provided.');
+        }
+        return;
+      }
+
+      try {
+        const res = await authAPI.verifyEmail(token);
+        if (!cancelled) {
+          setStatus('success');
+          setMessage(res.data?.message || 'Email verified successfully.');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setStatus('error');
+          setMessage(err.response?.data?.message || 'Verification failed. Please try again.');
+        }
+      }
+    };
+
+    verify();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams]);
 
   return (

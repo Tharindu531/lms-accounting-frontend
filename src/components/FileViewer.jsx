@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { X, Download, ExternalLink, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, Download, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
 
 const FileViewer = ({ file, onClose }) => {
   const [zoom, setZoom] = useState(100);
-  const [currentPage, setCurrentPage] = useState(1);
 
   if (!file) return null;
 
@@ -41,20 +40,6 @@ const FileViewer = ({ file, onClose }) => {
         <div className="h-full w-full">
           <iframe
             src={`${url}#toolbar=1&navpanes=0`}
-            className="w-full h-full border-0"
-            title={file.originalFileName}
-          />
-        </div>
-      );
-    }
-
-    if (fileType === 'PRESENTATION') {
-      // For presentations, we'll use Google Docs Viewer or Office Online Viewer
-      const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
-      return (
-        <div className="h-full w-full">
-          <iframe
-            src={viewerUrl}
             className="w-full h-full border-0"
             title={file.originalFileName}
           />

@@ -71,6 +71,7 @@ const ManageUnits = () => {
       await unitAPI.delete(id);
       fetchUnits();
     } catch (err) {
+      console.error('Failed to delete unit:', err);
       alert('Failed to delete unit');
     }
   };

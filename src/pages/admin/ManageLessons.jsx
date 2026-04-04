@@ -102,12 +102,8 @@ const ManageLessons = () => {
       alert('Please save the lesson first before uploading files.');
       return;
     }
-    try {
-      await fileAPI.uploadForLesson(editingLesson.id, file);
-      await fetchAttachments(editingLesson.id);
-    } catch (err) {
-      throw err;
-    }
+    await fileAPI.uploadForLesson(editingLesson.id, file);
+    await fetchAttachments(editingLesson.id);
   };
 
   const handleFileDelete = async (attachmentId) => {
@@ -116,6 +112,7 @@ const ManageLessons = () => {
       await fileAPI.delete(attachmentId);
       await fetchAttachments(editingLesson.id);
     } catch (err) {
+      console.error('Failed to delete file:', err);
       alert('Failed to delete file');
     }
   };
@@ -156,6 +153,7 @@ const ManageLessons = () => {
       await lessonAPI.delete(id);
       fetchLessons();
     } catch (err) {
+      console.error('Failed to delete lesson:', err);
       alert('Failed to delete lesson');
     }
   };

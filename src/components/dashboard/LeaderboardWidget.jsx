@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { Trophy, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 
+const renderSortIcon = (field, sortField, sortDirection) => {
+  if (sortField !== field) return null;
+  return sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
+};
+
 const LeaderboardWidget = ({ data, loading, quizRequired }) => {
   const [sortField, setSortField] = useState('rank');
   const [sortDirection, setSortDirection] = useState('asc');
@@ -63,11 +68,6 @@ const LeaderboardWidget = ({ data, loading, quizRequired }) => {
     return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
   });
 
-  const SortIcon = ({ field }) => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
-  };
-
   const getRankBadge = (rank) => {
     if (rank === 1) return 'bg-yellow-100 text-yellow-800';
     if (rank === 2) return 'bg-gray-100 text-gray-800';
@@ -91,7 +91,7 @@ const LeaderboardWidget = ({ data, loading, quizRequired }) => {
                 onClick={() => handleSort('rank')}
               >
                 <div className="flex items-center gap-1">
-                  Rank <SortIcon field="rank" />
+                  Rank {renderSortIcon('rank', sortField, sortDirection)}
                 </div>
               </th>
               <th className="pb-3">Student</th>
@@ -100,7 +100,7 @@ const LeaderboardWidget = ({ data, loading, quizRequired }) => {
                 onClick={() => handleSort('batch')}
               >
                 <div className="flex items-center gap-1">
-                  Batch <SortIcon field="batch" />
+                  Batch {renderSortIcon('batch', sortField, sortDirection)}
                 </div>
               </th>
               <th
@@ -108,7 +108,7 @@ const LeaderboardWidget = ({ data, loading, quizRequired }) => {
                 onClick={() => handleSort('percentage')}
               >
                 <div className="flex items-center gap-1">
-                  Score <SortIcon field="percentage" />
+                  Score {renderSortIcon('percentage', sortField, sortDirection)}
                 </div>
               </th>
               <th
@@ -116,7 +116,7 @@ const LeaderboardWidget = ({ data, loading, quizRequired }) => {
                 onClick={() => handleSort('timeTaken')}
               >
                 <div className="flex items-center gap-1">
-                  <Clock size={14} /> Time <SortIcon field="timeTaken" />
+                  <Clock size={14} /> Time {renderSortIcon('timeTaken', sortField, sortDirection)}
                 </div>
               </th>
             </tr>

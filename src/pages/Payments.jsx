@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { paymentAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
+import useAuth from '../context/useAuth';
 import { CreditCard, CheckCircle, AlertTriangle, Calendar } from 'lucide-react';
 
 const Payments = () => {
