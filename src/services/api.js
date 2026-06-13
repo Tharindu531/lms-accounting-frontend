@@ -175,12 +175,14 @@ export const userAPI = {
   getById: (id) => api.get(`/api/admin/users/${id}`),
   getByBatch: (batch) => api.get(`/api/admin/users/batch/${batch}`),
   create: (data) => api.post('/api/admin/users', data),
+  delete: (id) => api.delete(`/api/admin/users/${id}`),
 };
 
 // Instructor APIs (Admin)
 export const instructorAPI = {
   getAll: () => api.get('/api/admin/instructors'),
   create: (data) => api.post('/api/admin/instructors', data),
+  delete: (id) => api.delete(`/api/admin/instructors/${id}`),
 };
 
 // Batch APIs

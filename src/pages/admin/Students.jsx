@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { userAPI, batchAPI } from '../../services/api';
-import { Users, Search, Mail, Hash, Plus, X, Phone, AlertCircle, CheckCircle } from 'lucide-react';
+import { Users, Search, Mail, Hash, Plus, X, Phone, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -10,6 +10,11 @@ const Students = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBatch, setFilterBatch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Delete confirmation
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Add Student Modal
   const [showModal, setShowModal] = useState(false);
@@ -129,6 +134,26 @@ const Students = () => {
     }
   };
 
+  const confirmDelete = (student) => {
+    setStudentToDelete(student);
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!studentToDelete) return;
+    setDeleting(true);
+    try {
+      await userAPI.delete(studentToDelete.id);
+      setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
+      setShowDeleteModal(false);
+      setStudentToDelete(null);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete student');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -197,6 +222,7 @@ const Students = () => {
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Contact</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Batch</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -251,6 +277,15 @@ const Students = () => {
                       {student.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  <td className="px-6 py-4">
+                    <button
+                      onClick={() => confirmDelete(student)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                      title="Delete student"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -296,6 +331,44 @@ const Students = () => {
             >
               Next
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && studentToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="text-red-600" size={20} />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-800">Delete Student</h2>
+              </div>
+              <p className="text-gray-600 mb-2">
+                Are you sure you want to delete <span className="font-semibold">{studentToDelete.firstName} {studentToDelete.lastName}</span>?
+              </p>
+              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-6">
+                This will permanently remove all records including quiz marks, lesson progress, payment history, and the student account. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setStudentToDelete(null); }}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Student'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

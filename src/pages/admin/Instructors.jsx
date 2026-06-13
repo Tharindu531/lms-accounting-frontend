@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { instructorAPI } from '../../services/api';
-import { GraduationCap, Search, Mail, Plus, X, Phone, AlertCircle, CheckCircle } from 'lucide-react';
+import { GraduationCap, Search, Mail, Plus, X, Phone, AlertCircle, CheckCircle, Trash2 } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -9,6 +9,10 @@ const Instructors = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [instructorToDelete, setInstructorToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [addMethod, setAddMethod] = useState('email');
@@ -62,6 +66,26 @@ const Instructors = () => {
 
   const openModal = () => { resetForm(); setShowModal(true); };
   const closeModal = () => { setShowModal(false); resetForm(); };
+
+  const confirmDelete = (instructor) => {
+    setInstructorToDelete(instructor);
+    setShowDeleteModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!instructorToDelete) return;
+    setDeleting(true);
+    try {
+      await instructorAPI.delete(instructorToDelete.id);
+      setInstructors(prev => prev.filter(i => i.id !== instructorToDelete.id));
+      setShowDeleteModal(false);
+      setInstructorToDelete(null);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete instructor');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -146,6 +170,7 @@ const Instructors = () => {
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Instructor</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Contact</th>
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -192,6 +217,15 @@ const Instructors = () => {
                       {inst.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  <td className="px-6 py-4">
+                    <button
+                      onClick={() => confirmDelete(inst)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                      title="Delete instructor"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -237,6 +271,44 @@ const Instructors = () => {
             >
               Next
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && instructorToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="text-red-600" size={20} />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-800">Delete Instructor</h2>
+              </div>
+              <p className="text-gray-600 mb-2">
+                Are you sure you want to delete <span className="font-semibold">{instructorToDelete.firstName} {instructorToDelete.lastName}</span>?
+              </p>
+              <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-6">
+                This will permanently remove the instructor account and all associated records. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowDeleteModal(false); setInstructorToDelete(null); }}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Instructor'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
