@@ -2,8 +2,14 @@ const USER_KEY = 'user';
 const REQUIRE_PASSWORD_CHANGE_KEY = 'requirePasswordChange';
 
 export const loadStoredUser = () => {
-  const value = localStorage.getItem(USER_KEY);
-  return value ? JSON.parse(value) : null;
+  try {
+    const value = localStorage.getItem(USER_KEY);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    // Corrupt localStorage entry — clear it so the app doesn't crash on every reload
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
 };
 
 export const storeUserSession = (user, requirePasswordChange = false) => {
