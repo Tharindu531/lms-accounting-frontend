@@ -139,6 +139,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isAdmin = user?.userType === 'ADMIN';
+  const isInstructor = user?.userType === 'INSTRUCTOR';
   const isStudent = user?.userType === 'STUDENT';
 
   return (
@@ -150,6 +151,7 @@ export const AuthProvider = ({ children }) => {
       logout,
       changePassword,
       isAdmin,
+      isInstructor,
       isStudent,
       isAuthenticated: !!user && (!!getToken() || !!loadRefreshToken()),
       requirePasswordChange

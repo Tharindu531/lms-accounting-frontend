@@ -177,6 +177,12 @@ export const userAPI = {
   create: (data) => api.post('/api/admin/users', data),
 };
 
+// Instructor APIs (Admin)
+export const instructorAPI = {
+  getAll: () => api.get('/api/admin/instructors'),
+  create: (data) => api.post('/api/admin/instructors', data),
+};
+
 // Batch APIs
 export const batchAPI = {
   // Public - for registration

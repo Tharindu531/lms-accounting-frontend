@@ -3,12 +3,12 @@ import useAuth from '../context/useAuth';
 import {
   Home, BookOpen, FileQuestion, Trophy, CreditCard,
   Users, LogOut, Menu, X, BarChart3, Layers,
-  FolderOpen, Database, ClipboardCheck
+  FolderOpen, Database, ClipboardCheck, GraduationCap
 } from 'lucide-react';
 import { useState } from 'react';
 
 const Layout = ({ children }) => {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isInstructor } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -30,6 +30,7 @@ const Layout = ({ children }) => {
     { to: '/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/admin/dashboard', icon: BarChart3, label: 'Analytics' },
     { to: '/admin/students', icon: Users, label: 'Students' },
+    { to: '/admin/instructors', icon: GraduationCap, label: 'Instructors' },
     { to: '/admin/batches', icon: Layers, label: 'Manage Batches' },
     { to: '/admin/units', icon: FolderOpen, label: 'Manage Units' },
     { to: '/admin/lessons', icon: BookOpen, label: 'Manage Lessons' },
@@ -39,7 +40,15 @@ const Layout = ({ children }) => {
     { to: '/admin/payments', icon: CreditCard, label: 'Payments' },
   ];
 
-  const links = isAdmin ? adminLinks : studentLinks;
+  const instructorLinks = [
+    { to: '/admin/units', icon: FolderOpen, label: 'Units' },
+    { to: '/admin/lessons', icon: BookOpen, label: 'Lessons' },
+    { to: '/admin/quizzes', icon: FileQuestion, label: 'Quizzes' },
+    { to: '/admin/question-bank', icon: Database, label: 'Question Bank' },
+    { to: '/admin/marking', icon: ClipboardCheck, label: 'Marking' },
+  ];
+
+  const links = isAdmin ? adminLinks : isInstructor ? instructorLinks : studentLinks;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -72,12 +81,15 @@ const Layout = ({ children }) => {
           {/* User info */}
           <div className="p-4 border-b border-indigo-500">
             <p className="font-medium">{user?.firstName} {user?.lastName}</p>
-            <p className="text-sm text-indigo-200">{user?.email}</p>
-            {!isAdmin && (
+            <p className="text-sm text-indigo-200">{user?.email || user?.phone}</p>
+            {!isAdmin && !isInstructor && (
               <p className="text-xs text-indigo-200 mt-1 font-mono">ID: {user?.id}</p>
             )}
+            {isInstructor && (
+              <p className="text-xs text-indigo-200 mt-1 font-mono">{user?.id}</p>
+            )}
             <span className="inline-block mt-2 px-2 py-1 bg-indigo-500 rounded text-xs">
-              {isAdmin ? 'Admin' : `Batch ${user?.batch}`}
+              {isAdmin ? 'Admin' : isInstructor ? 'Instructor' : `Batch ${user?.batch}`}
             </span>
           </div>
 

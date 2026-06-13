@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
 import useAuth from '../context/useAuth';
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
-  const { user, loading, isAdmin, requirePasswordChange } = useAuth();
+const ProtectedRoute = ({ children, adminOnly = false, instructorOrAdmin = false }) => {
+  const { user, loading, isAdmin, isInstructor, requirePasswordChange } = useAuth();
 
   if (loading) {
     return (
@@ -22,6 +22,15 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
   if (adminOnly && !isAdmin) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (instructorOrAdmin && !isAdmin && !isInstructor) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // Instructors don't have a student-side view — redirect them to content management
+  if (isInstructor && !adminOnly && !instructorOrAdmin) {
+    return <Navigate to="/admin/lessons" replace />;
   }
 
   return children;

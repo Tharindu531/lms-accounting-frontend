@@ -20,6 +20,7 @@ const Payments = lazy(() => import('./pages/Payments'));
 
 // Admin pages - lazy loaded
 const Students = lazy(() => import('./pages/admin/Students'));
+const Instructors = lazy(() => import('./pages/admin/Instructors'));
 const ManageBatches = lazy(() => import('./pages/admin/ManageBatches'));
 const ManageUnits = lazy(() => import('./pages/admin/ManageUnits'));
 const ManageLessons = lazy(() => import('./pages/admin/ManageLessons'));
@@ -116,12 +117,24 @@ function App() {
                 }
               />
 
+              {/* Admin-only: user & financial management */}
               <Route
                 path="/admin/students"
                 element={
                   <ProtectedRoute adminOnly>
                     <Layout>
                       <Students />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin/instructors"
+                element={
+                  <ProtectedRoute adminOnly>
+                    <Layout>
+                      <Instructors />
                     </Layout>
                   </ProtectedRoute>
                 }
@@ -139,9 +152,21 @@ function App() {
               />
 
               <Route
-                path="/admin/units"
+                path="/admin/payments"
                 element={
                   <ProtectedRoute adminOnly>
+                    <Layout>
+                      <ManagePayments />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Instructor + Admin: content management */}
+              <Route
+                path="/admin/units"
+                element={
+                  <ProtectedRoute instructorOrAdmin>
                     <Layout>
                       <ManageUnits />
                     </Layout>
@@ -152,7 +177,7 @@ function App() {
               <Route
                 path="/admin/lessons"
                 element={
-                  <ProtectedRoute adminOnly>
+                  <ProtectedRoute instructorOrAdmin>
                     <Layout>
                       <ManageLessons />
                     </Layout>
@@ -163,7 +188,7 @@ function App() {
               <Route
                 path="/admin/quizzes"
                 element={
-                  <ProtectedRoute adminOnly>
+                  <ProtectedRoute instructorOrAdmin>
                     <Layout>
                       <ManageQuizzes />
                     </Layout>
@@ -174,7 +199,7 @@ function App() {
               <Route
                 path="/admin/question-bank"
                 element={
-                  <ProtectedRoute adminOnly>
+                  <ProtectedRoute instructorOrAdmin>
                     <Layout>
                       <QuestionBank />
                     </Layout>
@@ -185,20 +210,9 @@ function App() {
               <Route
                 path="/admin/marking"
                 element={
-                  <ProtectedRoute adminOnly>
+                  <ProtectedRoute instructorOrAdmin>
                     <Layout>
                       <AdminMarking />
-                    </Layout>
-                  </ProtectedRoute>
-                }
-              />
-
-              <Route
-                path="/admin/payments"
-                element={
-                  <ProtectedRoute adminOnly>
-                    <Layout>
-                      <ManagePayments />
                     </Layout>
                   </ProtectedRoute>
                 }
