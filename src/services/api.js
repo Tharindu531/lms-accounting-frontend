@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { getToken, clearToken } from './tokenStore';
-import { clearStoredSession } from './authSession';
+import { getToken, setToken, clearToken } from './tokenStore';
+import { clearStoredSession, loadRefreshToken, storeRefreshToken, storeUserSession } from './authSession';
 
 // Base URL is the Railway origin only — all paths include /api explicitly.
 // DO NOT add /api here: axios drops the baseURL path when request paths start with /
@@ -16,7 +16,7 @@ const api = axios.create({
   },
 });
 
-// Add token to requests - use in-memory token, not localStorage
+// Attach access token to every request
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
@@ -25,18 +25,80 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle token expiration
+// Silent token refresh on 401.
+// Multiple concurrent 401s are queued while the single refresh call is in flight.
+let isRefreshing = false;
+let pendingQueue = [];
+
+const drainQueue = (error, newToken) => {
+  pendingQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(newToken);
+  });
+  pendingQueue = [];
+};
+
+const forceLogout = () => {
+  clearToken();
+  clearStoredSession();
+  if (window.location.pathname !== '/login') {
+    window.location.assign('/login');
+  }
+};
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      clearToken();
-      clearStoredSession();
-      if (window.location.pathname !== '/login') {
-        window.location.assign('/login');
-      }
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Only intercept 401s; skip refresh endpoint to avoid infinite loop
+    if (
+      error.response?.status !== 401 ||
+      originalRequest._retry ||
+      originalRequest.url?.includes('/api/auth/refresh')
+    ) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    originalRequest._retry = true;
+
+    if (isRefreshing) {
+      // Queue this request until the in-flight refresh resolves
+      return new Promise((resolve, reject) => {
+        pendingQueue.push({ resolve, reject });
+      }).then((newToken) => {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      });
+    }
+
+    isRefreshing = true;
+    const refreshToken = loadRefreshToken();
+
+    if (!refreshToken) {
+      isRefreshing = false;
+      forceLogout();
+      return Promise.reject(error);
+    }
+
+    try {
+      const response = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken });
+      const { accessToken, refreshToken: newRefresh, user } = response.data.data;
+
+      setToken(accessToken);
+      storeRefreshToken(newRefresh);
+      if (user) storeUserSession(user, false);
+
+      drainQueue(null, accessToken);
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      return api(originalRequest);
+    } catch (refreshError) {
+      drainQueue(refreshError, null);
+      forceLogout();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 
@@ -44,6 +106,7 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post('/api/auth/register', data),
   login: (data) => api.post('/api/auth/login', data),
+  refresh: (refreshToken) => api.post('/api/auth/refresh', { refreshToken }),
   getMe: () => api.get('/api/auth/me'),
   verifyEmail: (token) => api.get('/api/auth/verify-email', { params: { token } }),
   verifyPhone: (data) => api.post('/api/auth/verify-phone', data),

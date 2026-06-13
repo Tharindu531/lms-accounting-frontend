@@ -3,8 +3,10 @@ import { authAPI } from '../services/api';
 import { getToken, setToken, clearToken } from '../services/tokenStore';
 import {
   clearStoredSession,
+  loadRefreshToken,
   loadRequirePasswordChange,
   loadStoredUser,
+  storeRefreshToken,
   storeUserSession,
 } from '../services/authSession';
 import AuthContext from './AuthContextStore';
@@ -20,23 +22,60 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = async () => {
       const savedUser = loadStoredUser();
       const savedToken = getToken();
+      const savedRefresh = loadRefreshToken();
 
-      if (!savedUser || !savedToken) {
-        clearToken();
-        clearStoredSession();
+      // Nothing stored — not logged in
+      if (!savedUser && !savedRefresh) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      // Access token already in memory (same JS session, e.g. hot-reload) — validate it
+      if (savedToken) {
+        try {
+          await authAPI.getMe();
+          if (!cancelled) {
+            setUser(savedUser);
+            setRequirePasswordChange(loadRequirePasswordChange());
+          }
+        } catch {
+          // Access token invalid; fall through to refresh below
+          clearToken();
+          await tryRefresh(cancelled, savedRefresh);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
+      // No access token in memory (page refresh) — use refresh token to restore session silently
+      await tryRefresh(cancelled, savedRefresh);
+      if (!cancelled) setLoading(false);
+    };
+
+    const tryRefresh = async (cancelled, refreshToken) => {
+      if (!refreshToken) {
         if (!cancelled) {
+          clearToken();
+          clearStoredSession();
           setUser(null);
           setRequirePasswordChange(false);
-          setLoading(false);
         }
         return;
       }
 
       try {
-        await authAPI.getMe();
+        const response = await authAPI.refresh(refreshToken);
+        const { accessToken, refreshToken: newRefresh, user: freshUser, requirePasswordChange: reqPC } =
+          response.data.data;
+
+        setToken(accessToken);
+        storeRefreshToken(newRefresh);
+        storeUserSession(freshUser, !!reqPC);
+
         if (!cancelled) {
-          setUser(savedUser);
-          setRequirePasswordChange(loadRequirePasswordChange());
+          setUser(freshUser);
+          setRequirePasswordChange(!!reqPC);
         }
       } catch {
         if (!cancelled) {
@@ -44,10 +83,6 @@ export const AuthProvider = ({ children }) => {
           clearStoredSession();
           setUser(null);
           setRequirePasswordChange(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
         }
       }
     };
@@ -63,14 +98,14 @@ export const AuthProvider = ({ children }) => {
     const response = await authAPI.login(credentials);
     const result = response.data;
 
-    // Check if phone verification is required
     if (!result.success && result.message === 'PHONE_VERIFICATION_REQUIRED') {
       return { phoneVerificationRequired: true };
     }
 
-    const { accessToken, user: userData, requirePasswordChange: reqPC } = result.data;
+    const { accessToken, refreshToken, user: userData, requirePasswordChange: reqPC } = result.data;
 
     setToken(accessToken);
+    storeRefreshToken(refreshToken);
     storeUserSession(userData, reqPC);
     setUser(userData);
     setRequirePasswordChange(!!reqPC);
@@ -85,9 +120,10 @@ export const AuthProvider = ({ children }) => {
 
   const changePassword = async (currentPassword, newPassword) => {
     const response = await authAPI.changePassword({ currentPassword, newPassword });
-    const { accessToken, user: userData } = response.data.data;
+    const { accessToken, refreshToken, user: userData } = response.data.data;
 
     setToken(accessToken);
+    storeRefreshToken(refreshToken);
     storeUserSession(userData, false);
     setUser(userData);
     setRequirePasswordChange(false);
@@ -115,7 +151,7 @@ export const AuthProvider = ({ children }) => {
       changePassword,
       isAdmin,
       isStudent,
-      isAuthenticated: !!user && !!getToken(),
+      isAuthenticated: !!user && (!!getToken() || !!loadRefreshToken()),
       requirePasswordChange
     }}>
       {children}
