@@ -17,6 +17,7 @@ const Quizzes = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [viewingFile, setViewingFile] = useState(null);
+  const [autoSubmitError, setAutoSubmitError] = useState('');
 
   // Timer
   const [timeLeft, setTimeLeft] = useState(null);
@@ -32,6 +33,13 @@ const Quizzes = () => {
 
   // Ref to prevent double-submit (race condition between button click and auto-submit)
   const submittingRef = useRef(false);
+  // Ref to ensure the timeout only ever triggers ONE automatic submit attempt.
+  // Without this, a failed auto-submit (e.g. a transient network/server error)
+  // would re-trigger itself forever: timedOut stays true, submitting goes back
+  // to false in the `finally` block, result stays null, so the effect below
+  // would fire again immediately — looping the failure alert indefinitely and
+  // never letting the student retry manually.
+  const autoSubmitAttemptedRef = useRef(false);
 
   useEffect(() => {
     fetchQuizzes();
@@ -56,9 +64,10 @@ const Quizzes = () => {
     submitQuizRef.current = submitQuiz;
   });
 
-  // Auto-submit when timer reaches zero
+  // Auto-submit when timer reaches zero — only ever attempted once automatically.
   useEffect(() => {
-    if (timedOut && !submitting && !result) {
+    if (timedOut && !submitting && !result && !autoSubmitAttemptedRef.current) {
+      autoSubmitAttemptedRef.current = true;
       submitQuizRef.current(true);
     }
   }, [timedOut, submitting, result]);
@@ -88,6 +97,8 @@ const Quizzes = () => {
       setQuizMarksId(null);
       setAnswerFiles({});
       setTimedOut(false);
+      setAutoSubmitError('');
+      autoSubmitAttemptedRef.current = false;
       setTimeLeft(quiz.timeLimit > 0 ? quiz.timeLimit * 60 : null);
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to start quiz');
@@ -117,9 +128,17 @@ const Quizzes = () => {
       const resultData = response.data.data;
       setResult(resultData);
       setQuizMarksId(resultData.quizMarksId);
+      setAutoSubmitError('');
       fetchQuizzes();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to submit quiz');
+      const message = err.response?.data?.message || 'Failed to submit quiz';
+      if (isAutoSubmit) {
+        // Surface this inline instead of alert() — alert() blocks the thread and,
+        // combined with a retry, could otherwise stack up multiple popups.
+        setAutoSubmitError(message);
+      } else {
+        alert(message);
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
@@ -393,10 +412,29 @@ const Quizzes = () => {
           })()}
 
           {/* Time's up banner */}
-          {timedOut && (
+          {timedOut && !autoSubmitError && (
             <div className="bg-red-600 px-6 py-3 flex items-center gap-2 text-white">
               <AlertTriangle size={16} className="flex-shrink-0" />
-              <span className="font-semibold">Time's up! Submitting your answers...</span>
+              <span className="font-semibold">
+                {submitting ? "Time's up! Submitting your answers..." : "Time's up!"}
+              </span>
+            </div>
+          )}
+
+          {/* Auto-submit failed — let the student retry manually instead of looping */}
+          {timedOut && autoSubmitError && (
+            <div className="bg-red-600 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-white">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="flex-shrink-0" />
+                <span className="font-semibold">Time's up — couldn't submit automatically: {autoSubmitError}</span>
+              </div>
+              <button
+                onClick={() => submitQuiz(true)}
+                disabled={submitting}
+                className="flex-shrink-0 px-4 py-1.5 bg-white text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition disabled:opacity-50"
+              >
+                {submitting ? 'Submitting...' : 'Try Submitting Again'}
+              </button>
             </div>
           )}
 
@@ -530,10 +568,6 @@ const Quizzes = () => {
             </div>
           </div>
         </div>
-
-        <button onClick={resetQuiz} className="mt-4 text-gray-500 hover:text-gray-700">
-          Cancel Quiz
-        </button>
 
         {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
       </div>
