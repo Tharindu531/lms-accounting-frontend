@@ -19,8 +19,10 @@ const DashboardFilters = ({ onFilterChange, showQuizFilter = false, showLessonFi
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const usersRes = await userAPI.getAll();
-        const users = usersRes.data.data || [];
+        // Filter dropdowns need the full student roster to build batch/student
+        // lists, not a paginated slice — request a large page size explicitly.
+        const usersRes = await userAPI.getAll({ size: 5000 });
+        const users = usersRes.data.data?.content || [];
         setStudents(users.filter(u => u.userType === 'STUDENT'));
 
         const uniqueBatches = [...new Set(users.filter(u => u.userType === 'STUDENT').map(u => u.batch))].sort((a, b) => a - b);

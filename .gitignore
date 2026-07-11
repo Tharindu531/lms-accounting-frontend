@@ -23,8 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment files (wasn't covered here at all before)
-.env
-.env.*
-*.env
-*.env.txt
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example

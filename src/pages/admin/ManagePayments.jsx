@@ -23,10 +23,12 @@ const ManagePayments = () => {
     try {
       const [paymentsRes, studentsRes] = await Promise.all([
         paymentAPI.getByMonth(selectedYear, selectedMonth),
-        userAPI.getAll()
+        // This page needs the full student roster (not a paginated slice)
+        // to compute paid/unpaid lists — request a large page size explicitly.
+        userAPI.getAll({ size: 5000 })
       ]);
       setPayments(paymentsRes.data.data || []);
-      setStudents(studentsRes.data.data || []);
+      setStudents(studentsRes.data.data?.content || []);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
