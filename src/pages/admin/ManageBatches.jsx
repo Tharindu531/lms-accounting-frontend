@@ -98,7 +98,7 @@ const ManageBatches = () => {
             <p className="text-sm text-gray-400 mt-2">Create a batch to allow student registration.</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto custom-scrollbar"><table className="w-full min-w-[640px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Batch Number</th>
@@ -152,15 +152,15 @@ const ManageBatches = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-xl font-semibold text-gray-800">Create Batch</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={24} />
@@ -227,7 +227,7 @@ const ManageBatches = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedBatch && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto custom-scrollbar">
             <div className="p-6">
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-red-100 rounded-full">

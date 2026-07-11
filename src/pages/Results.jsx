@@ -170,7 +170,7 @@ const Results = () => {
                           </p>
                         </div>
                         <div className="bg-white rounded-lg overflow-hidden">
-                          <table className="w-full">
+                          <div className="overflow-x-auto custom-scrollbar"><table className="w-full min-w-[560px]">
                             <thead className="bg-gray-50">
                               <tr>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Rank</th>
@@ -214,7 +214,7 @@ const Results = () => {
                                 </tr>
                               ))}
                             </tbody>
-                          </table>
+                          </table></div>
                         </div>
                       </div>
                     )}

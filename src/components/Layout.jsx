@@ -60,7 +60,7 @@ const Layout = ({ children }) => {
         </div>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          className="p-2 -m-2 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors"
           aria-label="Toggle menu"
         >
           {sidebarOpen ? <X size={22} /> : <Menu size={22} />}

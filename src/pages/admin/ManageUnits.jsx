@@ -105,7 +105,7 @@ const ManageUnits = () => {
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto custom-scrollbar"><table className="w-full min-w-[640px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
@@ -119,10 +119,10 @@ const ManageUnits = () => {
               {units.map((unit) => (
                 <tr key={unit.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{unit.displayOrder}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <FolderOpen className="text-indigo-500 mr-2" size={20} />
-                      <span className="font-medium text-gray-900">{unit.name}</span>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center min-w-0 max-w-xs">
+                      <FolderOpen className="text-indigo-500 mr-2 flex-shrink-0" size={20} />
+                      <span className="font-medium text-gray-900 truncate">{unit.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{unit.description}</td>
@@ -148,15 +148,15 @@ const ManageUnits = () => {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </div>
       )}
 
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-xl font-semibold text-gray-800">
                 {editingUnit ? 'Edit Unit' : 'Add New Unit'}
               </h2>

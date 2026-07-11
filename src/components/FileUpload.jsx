@@ -154,7 +154,7 @@ export const FileList = ({ files, onDelete, showDelete = true }) => {
             {showDelete && onDelete && (
               <button
                 onClick={() => onDelete(file.id)}
-                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                className="p-2 -m-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors" aria-label="Remove file"
               >
                 <X size={16} />
               </button>

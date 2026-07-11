@@ -363,17 +363,21 @@ const ManageQuizzes = () => {
       {/* Quiz Modal */}
       {showQuizModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
               <h2 className="text-xl font-semibold text-gray-800">
                 {editingQuiz ? 'Edit Quiz' : 'Add New Quiz'}
               </h2>
-              <button onClick={() => setShowQuizModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+              <button
+                onClick={() => setShowQuizModal(false)}
+                className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <X size={22} />
               </button>
             </div>
 
-            <form onSubmit={handleQuizSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleQuizSubmit} className="p-6 space-y-4 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
                 <input
@@ -456,7 +460,7 @@ const ManageQuizzes = () => {
       {/* Question Modal */}
       {showQuestionModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
               <h2 className="text-xl font-semibold text-gray-800">
                 Add Question to "{selectedQuizForQuestion?.title}"
@@ -566,7 +570,7 @@ const ManageQuizzes = () => {
       {/* Create from Units Modal */}
       {showFromUnitsModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
               <h2 className="text-xl font-semibold text-gray-800">Create Quiz from Question Bank</h2>
               <button onClick={() => setShowFromUnitsModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -610,7 +614,7 @@ const ManageQuizzes = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Time Limit (minutes)</label>
                   <input

@@ -263,7 +263,7 @@ const QuestionBank = () => {
               </div>
 
               {question.questionType !== 'WRITING' && (
-                <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
                   {['A', 'B', 'C', 'D', 'E'].map(opt => (
                     <div
                       key={opt}
@@ -319,18 +319,22 @@ const QuestionBank = () => {
       {/* Question Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-xl font-semibold text-gray-800">
                 {editingQuestion ? 'Edit Question' : 'Add Question to Bank'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <X size={22} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
                   <select
@@ -469,11 +473,15 @@ const QuestionBank = () => {
       {/* Stats Modal */}
       {showStatsModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
               <h2 className="text-xl font-semibold text-gray-800">Question Bank Statistics</h2>
-              <button onClick={() => setShowStatsModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
+              <button
+                onClick={() => setShowStatsModal(false)}
+                className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <X size={22} />
               </button>
             </div>
 
