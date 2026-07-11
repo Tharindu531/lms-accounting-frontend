@@ -311,7 +311,7 @@ const ManageQuizzes = () => {
                       {quiz.questions.map((q, index) => (
                         <div key={q.id} className="p-3 bg-gray-50 rounded-lg">
                           <div className="flex items-start justify-between">
-                            <p className="text-sm text-gray-800">
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap">
                               <span className="font-medium">{index + 1}.</span> {q.questionText}
                             </p>
                             <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${

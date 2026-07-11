@@ -413,7 +413,7 @@ const Quizzes = () => {
                 <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
               </div>
 
-              <p className="text-xl font-medium text-gray-800 mb-4">{question.questionText}</p>
+              <p className="text-xl font-medium text-gray-800 mb-4 whitespace-pre-wrap">{question.questionText}</p>
 
               {/* Question attachments */}
               {question.attachments?.length > 0 && (
@@ -461,7 +461,7 @@ const Quizzes = () => {
                       <button
                         key={option}
                         onClick={() => handleAnswer(question.id, option)}
-                        className={`w-full text-left p-4 rounded-lg border-2 transition ${
+                        className={`w-full text-left p-4 rounded-lg border-2 transition whitespace-pre-wrap ${
                           answers[question.id] === option
                             ? 'border-indigo-500 bg-indigo-50'
                             : 'border-gray-200 hover:border-indigo-300'
@@ -644,7 +644,7 @@ const AnswerDetailCard = ({
     <div className={`p-4 rounded-xl border-2 ${cardBg}`}>
       {/* Question header */}
       <div className="flex items-start justify-between mb-3">
-        <p className="font-medium text-gray-800 pr-4">
+        <p className="font-medium text-gray-800 pr-4 whitespace-pre-wrap">
           {index + 1}. {detail.questionText}
         </p>
         <span className={`flex-shrink-0 px-2 py-0.5 text-xs rounded-full ${

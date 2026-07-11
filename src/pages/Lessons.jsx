@@ -95,6 +95,17 @@ const Lessons = () => {
           rel: 0,
         },
         events: {
+          // Pings the backend once the player has actually loaded, so it has a real
+          // "started watching" timestamp to compare against when the video ends.
+          // Without this, the completion ping below would be the first progress
+          // record ever created for the lesson, and the backend now treats a
+          // completion claim with no prior progress record as suspicious.
+          onReady: () => {
+            const lesson = selectedLessonRef.current;
+            if (lesson && !lesson.completed && lesson.youtubeLink) {
+              lessonAPI.updateProgress(lesson.id, { completed: false, watchedSeconds: 0 }).catch(() => {});
+            }
+          },
           onStateChange: (event) => {
             // YT.PlayerState.ENDED === 0
             if (event.data === 0) {

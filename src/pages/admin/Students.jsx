@@ -5,11 +5,15 @@ import { Users, Search, Mail, Hash, Plus, X, Phone, AlertCircle, CheckCircle, Tr
 const ITEMS_PER_PAGE = 20;
 
 const Students = () => {
+  // `students` holds only the current page's rows now — the backend paginates
+  // (and filters) server-side instead of shipping all ~5,000 students at once.
   const [students, setStudents] = useState([]);
+  const [pageInfo, setPageInfo] = useState({ totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterBatch, setFilterBatch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1); // 1-indexed for display; converted to 0-indexed for the API
 
   // Delete confirmation
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -31,15 +35,34 @@ const Students = () => {
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
+  // Debounce the search box so we're not firing a request on every keystroke.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [searchTerm]);
+
+  // Re-fetch whenever page, search, or batch filter changes.
   useEffect(() => {
     fetchStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, debouncedSearch, filterBatch]);
+
+  useEffect(() => {
     fetchBatches();
   }, []);
 
   const fetchStudents = async () => {
+    setLoading(true);
     try {
-      const response = await userAPI.getAll();
-      setStudents(response.data.data || []);
+      const response = await userAPI.getAll({
+        page: currentPage - 1,
+        size: ITEMS_PER_PAGE,
+        search: debouncedSearch || undefined,
+        batch: filterBatch || undefined,
+      });
+      const data = response.data.data || {};
+      setStudents(data.content || []);
+      setPageInfo({ totalElements: data.totalElements || 0, totalPages: data.totalPages || 0 });
     } catch (err) {
       console.error('Failed to load students:', err);
     } finally {
@@ -56,32 +79,14 @@ const Students = () => {
     }
   };
 
-  const filteredStudents = students.filter(student => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = !searchTerm ||
-      student.firstName?.toLowerCase().includes(searchLower) ||
-      student.lastName?.toLowerCase().includes(searchLower) ||
-      student.email?.toLowerCase().includes(searchLower) ||
-      student.phone?.toLowerCase().includes(searchLower) ||
-      student.id?.toLowerCase().includes(searchLower);
-
-    const matchesBatch = !filterBatch || student.batch === parseInt(filterBatch);
-
-    return matchesSearch && matchesBatch;
-  });
-
-  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
-  const paginatedStudents = filteredStudents.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  const totalPages = pageInfo.totalPages;
 
   const handleFilterChange = (setter) => (e) => {
     setter(e.target.value);
     setCurrentPage(1);
   };
 
-  const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a, b) => a - b);
+  const uniqueBatches = [...new Set(batches.map(b => b.batchNumber))].sort((a, b) => a - b);
 
   const resetForm = () => {
     setFormData({ firstName: '', lastName: '', email: '', phone: '', batch: '' });
@@ -144,9 +149,9 @@ const Students = () => {
     setDeleting(true);
     try {
       await userAPI.delete(studentToDelete.id);
-      setStudents(prev => prev.filter(s => s.id !== studentToDelete.id));
       setShowDeleteModal(false);
       setStudentToDelete(null);
+      fetchStudents();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to delete student');
     } finally {
@@ -168,7 +173,7 @@ const Students = () => {
         <h1 className="text-2xl font-bold text-gray-800">Students</h1>
         <div className="flex items-center gap-3">
           <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-sm font-medium">
-            {students.length} Total
+            {pageInfo.totalElements} Total
           </span>
           <button
             onClick={openModal}
@@ -208,7 +213,7 @@ const Students = () => {
 
       {/* Students Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {filteredStudents.length === 0 ? (
+        {students.length === 0 ? (
           <div className="p-12 text-center">
             <Users className="mx-auto text-gray-300 mb-4" size={48} />
             <p className="text-gray-500">No students found.</p>
@@ -226,7 +231,7 @@ const Students = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {paginatedStudents.map((student) => (
+              {students.map((student) => (
                 <tr key={student.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded text-gray-700">
@@ -297,7 +302,7 @@ const Students = () => {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-gray-500">
-            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, filteredStudents.length)} of {filteredStudents.length} students
+            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, pageInfo.totalElements)} of {pageInfo.totalElements} students
           </p>
           <div className="flex items-center gap-2">
             <button

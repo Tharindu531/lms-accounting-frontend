@@ -204,12 +204,12 @@ const AdminMarking = () => {
                     <span className="text-sm text-gray-500">Q{index + 1}</span>
                   </div>
 
-                  <p className="font-medium text-gray-800 mb-3">{answer.questionText}</p>
+                  <p className="font-medium text-gray-800 mb-3 whitespace-pre-wrap">{answer.questionText}</p>
 
                   {answer.expectedAnswer && (
                     <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                       <p className="text-xs text-blue-700 font-medium mb-1">Expected Answer:</p>
-                      <p className="text-sm text-blue-800">{answer.expectedAnswer}</p>
+                      <p className="text-sm text-blue-800 whitespace-pre-wrap">{answer.expectedAnswer}</p>
                     </div>
                   )}
 

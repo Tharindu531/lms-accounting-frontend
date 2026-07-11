@@ -244,7 +244,7 @@ const QuestionBank = () => {
                     )}
                     <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
                   </div>
-                  <p className="text-gray-800 font-medium">{question.questionText}</p>
+                  <p className="text-gray-800 font-medium whitespace-pre-wrap">{question.questionText}</p>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <button
@@ -267,7 +267,7 @@ const QuestionBank = () => {
                   {['A', 'B', 'C', 'D', 'E'].map(opt => (
                     <div
                       key={opt}
-                      className={`p-2 rounded text-sm ${
+                      className={`p-2 rounded text-sm whitespace-pre-wrap ${
                         question.correctAnswer === opt
                           ? 'bg-green-100 text-green-800 border border-green-300'
                           : 'bg-gray-50 text-gray-600'
@@ -282,7 +282,7 @@ const QuestionBank = () => {
               {question.questionType === 'WRITING' && question.correctAnswer && (
                 <div className="mt-3 p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-green-700 font-medium mb-1">Expected Answer:</p>
-                  <p className="text-sm text-green-800">{question.correctAnswer}</p>
+                  <p className="text-sm text-green-800 whitespace-pre-wrap">{question.correctAnswer}</p>
                 </div>
               )}
 

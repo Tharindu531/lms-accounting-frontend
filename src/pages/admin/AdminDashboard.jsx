@@ -17,6 +17,11 @@ const AdminDashboard = () => {
   const [studentResultsData, setStudentResultsData] = useState([]);
   const [lessonProgressData, setLessonProgressData] = useState([]);
 
+  // Student Results is now server-paginated (it can be ~5,000 rows unfiltered).
+  const [studentResultsPage, setStudentResultsPage] = useState(0);
+  const [studentResultsPageInfo, setStudentResultsPageInfo] = useState({ totalElements: 0, totalPages: 0 });
+  const STUDENT_RESULTS_PAGE_SIZE = 50;
+
   const tabs = [
     { id: 'overview', label: 'Overview', icon: BarChart3 },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
@@ -42,8 +47,17 @@ const AdminDashboard = () => {
           }
           break;
         case 'students': {
-          const studentsRes = await adminDashboardAPI.getStudentResults(filters);
-          setStudentResultsData(studentsRes.data.data);
+          const studentsRes = await adminDashboardAPI.getStudentResults({
+            ...filters,
+            page: studentResultsPage,
+            size: STUDENT_RESULTS_PAGE_SIZE,
+          });
+          const paged = studentsRes.data.data || {};
+          setStudentResultsData(paged.content || []);
+          setStudentResultsPageInfo({
+            totalElements: paged.totalElements || 0,
+            totalPages: paged.totalPages || 0,
+          });
           break;
         }
         case 'lessons': {
@@ -59,7 +73,7 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, filters]);
+  }, [activeTab, filters, studentResultsPage]);
 
   useEffect(() => {
     fetchData();
@@ -67,6 +81,7 @@ const AdminDashboard = () => {
 
   const handleFilterChange = (newFilters) => {
     setFilters(newFilters);
+    setStudentResultsPage(0);
   };
 
   const renderContent = () => {
@@ -125,6 +140,32 @@ const AdminDashboard = () => {
 
       {/* Content */}
       {renderContent()}
+
+      {/* Pagination for the Student Results tab — server-paginated since it can be
+          ~5,000 rows unfiltered. */}
+      {activeTab === 'students' && studentResultsPageInfo.totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-gray-500">
+            Page {studentResultsPage + 1} of {studentResultsPageInfo.totalPages} ({studentResultsPageInfo.totalElements} students)
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setStudentResultsPage(p => Math.max(0, p - 1))}
+              disabled={studentResultsPage === 0}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setStudentResultsPage(p => Math.min(studentResultsPageInfo.totalPages - 1, p + 1))}
+              disabled={studentResultsPage >= studentResultsPageInfo.totalPages - 1}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

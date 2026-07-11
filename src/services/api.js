@@ -171,7 +171,8 @@ export const leaderboardAPI = {
 
 // User APIs (Admin)
 export const userAPI = {
-  getAll: () => api.get('/api/admin/users'),
+  // Server-paginated + filtered now that there can be ~5,000 students.
+  getAll: (params = {}) => api.get('/api/admin/users', { params }),
   getById: (id) => api.get(`/api/admin/users/${id}`),
   getByBatch: (batch) => api.get(`/api/admin/users/batch/${batch}`),
   create: (data) => api.post('/api/admin/users', data),
