@@ -45,9 +45,16 @@ const Quizzes = () => {
     return () => clearTimeout(id);
   }, [timeLeft]);
 
-  // Keep a ref to submitQuiz so the timer effect always calls the latest version
+  // Keep a ref to submitQuiz so the timer effect always calls the latest version.
+  // NOTE: this must run inside an effect, not as a plain statement during render —
+  // submitQuiz is declared later in this component via `const`, so assigning to the
+  // ref synchronously here would throw "Cannot access 'submitQuiz' before
+  // initialization" (temporal dead zone) on every render. An effect runs after the
+  // whole component body has executed, by which point submitQuiz is defined.
   const submitQuizRef = useRef(null);
-  submitQuizRef.current = submitQuiz;
+  useEffect(() => {
+    submitQuizRef.current = submitQuiz;
+  });
 
   // Auto-submit when timer reaches zero
   useEffect(() => {
