@@ -1,330 +1,174 @@
-import { useState, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Mail, Phone, ShieldCheck, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import useAuth from '../context/useAuth';
 import { authAPI } from '../services/api';
-import { Mail, Lock, AlertCircle, Phone, ShieldCheck } from 'lucide-react';
 import PhoneInput from '../components/PhoneInput';
+import AuthShell from '../components/auth/AuthShell';
+import OtpInput from '../components/auth/OtpInput';
+import Button from '../components/ui/Button';
+import { Field, Input } from '../components/ui/primitives';
+import { errorMessage } from '../lib/errors';
+import { cn } from '../lib/cn';
+import { homeFor } from '../lib/routes';
+
+const useCooldown = () => {
+  const [left, setLeft] = useState(0);
+  useEffect(() => {
+    if (left <= 0) return undefined;
+    const id = setTimeout(() => setLeft((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [left]);
+  return [left, () => setLeft(60)];
+};
 
 const Login = () => {
-  const [step, setStep] = useState('login'); // 'login' | 'otp'
-  const [loginMethod, setLoginMethod] = useState('email');
+  const { t } = useTranslation();
+  const [step, setStep] = useState('login');
+  const [method, setMethod] = useState('email');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // OTP state
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpLoading, setOtpLoading] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const otpRefs = useRef([]);
+  const [otp, setOtp] = useState('');
+  const [cooldown, startCooldown] = useCooldown();
 
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const goOn = (result) => {
+    if (result.requirePasswordChange) return navigate('/change-password');
+    const from = location.state?.from;
+    navigate(from && from !== '/login' && result.user?.userType === 'STUDENT' ? from : homeFor(result.user), { replace: true });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      const credentials = loginMethod === 'email'
-        ? { email, password }
-        : { phone, password };
-
-      const result = await login(credentials);
-
+      const result = await login(method === 'email' ? { email, password } : { phone, password });
       if (result.phoneVerificationRequired) {
         setStep('otp');
-        setError('');
-        startResendCooldown();
-      } else if (result.requirePasswordChange) {
-        navigate('/change-password');
+        startCooldown();
       } else {
-        navigate('/dashboard');
+        goOn(result);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      setError(errorMessage(err, t('auth.signInFailed')));
     } finally {
       setLoading(false);
     }
   };
 
-  const startResendCooldown = () => {
-    setResendCooldown(60);
-    const interval = setInterval(() => {
-      setResendCooldown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleOtpChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return;
-    const newOtp = [...otp];
-    newOtp[index] = value.slice(-1);
-    setOtp(newOtp);
-    if (value && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      otpRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleOtpPaste = (e) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pasted.length === 6) {
-      setOtp(pasted.split(''));
-      otpRefs.current[5]?.focus();
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    const otpCode = otp.join('');
-    if (otpCode.length !== 6) {
-      setError('Please enter the 6-digit OTP');
-      return;
-    }
-
-    setOtpLoading(true);
+  const verify = async (e) => {
+    e?.preventDefault();
+    if (otp.length !== 6) return;
+    setLoading(true);
     setError('');
-
     try {
-      await authAPI.verifyPhone({ phone, otp: otpCode });
-      // Phone verified, now log in again
-      const credentials = { phone, password };
-      const result = await login(credentials);
-
-      if (result.requirePasswordChange) {
-        navigate('/change-password');
-      } else {
-        navigate('/dashboard');
-      }
+      await authAPI.verifyPhone({ phone, otp });
+      goOn(await login({ phone, password }));
     } catch (err) {
-      setError(err.response?.data?.message || 'OTP verification failed');
+      setError(errorMessage(err, t('auth.codeFailed')));
     } finally {
-      setOtpLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0) return;
-    setError('');
-
+  const resend = async () => {
     try {
       await authAPI.resendPhoneOtp(phone);
-      startResendCooldown();
+      startCooldown();
+      toast.success(t('auth.codeSent'));
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to resend OTP');
+      toast.error(errorMessage(err));
     }
   };
 
-  return (
-    <div className="min-h-screen flex">
-      {/* Left Side - Hero Image */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        <img
-          src="/Gemini_Generated_Image_yu0rwlyu0rwlyu0r.png"
-          alt="Accounting with Indika Amarakoon"
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-indigo-900/80 via-indigo-900/30 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 p-10 text-white">
-          <h2 className="text-3xl font-bold mb-3">Your Path to Financial Mastery</h2>
-          <p className="text-indigo-100 text-lg">Join thousands of successful students learning accounting the right way.</p>
-        </div>
-      </div>
-
-      {/* Right Side */}
-      <div className="w-full lg:w-1/2 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-          {/* Logo */}
-          <div className="flex flex-col items-center mb-8">
-            <img
-              src="/photo.webp"
-              alt="Indika Amarakoon"
-              className="w-20 h-20 rounded-full object-cover border-4 border-indigo-100 shadow-lg mb-4"
-            />
-            <h1 className="text-2xl font-bold text-gray-800 text-center">Accounting with Indika Amarakoon</h1>
-          </div>
-
-          {step === 'login' ? (
-            <>
-              <h2 className="text-xl font-semibold text-center text-gray-700 mb-6">
-                Welcome Back!
-              </h2>
-
-              {error && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2 mb-6">
-                  <AlertCircle size={20} />
-                  {error}
-                </div>
-              )}
-
-              {/* Login Method Toggle */}
-              <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
-                <button
-                  type="button"
-                  onClick={() => { setLoginMethod('email'); setError(''); }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition ${
-                    loginMethod === 'email'
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Mail size={16} />
-                  Email
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setLoginMethod('phone'); setError(''); }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition ${
-                    loginMethod === 'phone'
-                      ? 'bg-white text-indigo-600 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Phone size={16} />
-                  Phone
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                {loginMethod === 'email' ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                        placeholder="Enter your email"
-                        required
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                    <PhoneInput
-                      onChange={setPhone}
-                      required
-                      placeholder="771234567"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                      placeholder="Enter your password"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Signing in...' : 'Sign In'}
-                </button>
-              </form>
-
-              <p className="mt-6 text-center text-gray-600">
-                Don't have an account?{' '}
-                <Link to="/register" className="text-indigo-600 font-medium hover:underline">
-                  Register here
-                </Link>
-              </p>
-            </>
-          ) : (
-            /* OTP Verification Step */
-            <>
-              <div className="flex flex-col items-center mb-6">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
-                  <ShieldCheck className="text-indigo-600" size={32} />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-700">Verify Your Phone</h2>
-                <p className="text-gray-500 text-sm text-center mt-2">
-                  An OTP has been sent to <span className="font-medium text-gray-700">{phone}</span>
-                </p>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 text-red-600 p-4 rounded-lg flex items-center gap-2 mb-6">
-                  <AlertCircle size={20} />
-                  {error}
-                </div>
-              )}
-
-              {/* OTP Input */}
-              <div className="flex justify-center gap-3 mb-6">
-                {otp.map((digit, index) => (
-                  <input
-                    key={index}
-                    ref={el => otpRefs.current[index] = el}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(index, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    onPaste={index === 0 ? handleOtpPaste : undefined}
-                    className="w-12 h-14 text-center text-xl font-semibold border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  />
-                ))}
-              </div>
-
-              <button
-                onClick={handleVerifyOtp}
-                disabled={otpLoading || otp.join('').length !== 6}
-                className="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-              >
-                {otpLoading ? 'Verifying...' : 'Verify & Continue'}
-              </button>
-
-              <div className="text-center space-y-3">
-                <button
-                  onClick={handleResendOtp}
-                  disabled={resendCooldown > 0}
-                  className="text-indigo-600 text-sm font-medium hover:underline disabled:text-gray-400 disabled:no-underline"
-                >
-                  {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
-                </button>
-                <div>
-                  <button
-                    onClick={() => { setStep('login'); setOtp(['', '', '', '', '', '']); setError(''); }}
-                    className="text-gray-500 text-sm hover:text-gray-700"
-                  >
-                    Back to login
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+  const ErrorLine = error ? (
+    <div role="alert" className="flex items-start gap-2 rounded-control bg-debit-soft text-debit text-sm px-3 py-2.5">
+      <AlertCircle size={18} className="shrink-0 mt-px" aria-hidden /> <span>{error}</span>
     </div>
+  ) : null;
+
+  if (step === 'otp') {
+    return (
+      <AuthShell>
+        <div className="h-11 w-11 rounded-full bg-brand-soft text-brand grid place-items-center mb-4"><ShieldCheck size={22} aria-hidden /></div>
+        <h1 className="text-2xl font-semibold">{t('auth.verifyTitle')}</h1>
+        <p className="text-ink-2 mt-1.5 mb-6">{t('auth.verifySent')} <span className="text-ink font-medium tabular">{phone}</span></p>
+        <form onSubmit={verify} className="space-y-5">
+          {ErrorLine}
+          <OtpInput value={otp} onChange={setOtp} disabled={loading} />
+          <Button type="submit" size="lg" className="w-full justify-center" loading={loading} disabled={otp.length !== 6}>
+            {t('auth.verifyAndSignIn')}
+          </Button>
+        </form>
+        <div className="flex items-center justify-between mt-5 text-sm">
+          <button type="button" onClick={() => { setStep('login'); setOtp(''); setError(''); }} className="text-ink-2 hover:text-ink">
+            {t('auth.backToSignIn')}
+          </button>
+          <button type="button" onClick={resend} disabled={cooldown > 0} className="text-brand font-medium disabled:text-ink-3">
+            {cooldown > 0 ? t('auth.resendIn', { s: cooldown }) : t('auth.resendCode')}
+          </button>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell>
+      <h1 className="text-2xl font-semibold">{t('auth.signInTitle')}</h1>
+      <p className="text-ink-2 mt-1.5 mb-6">{t('auth.signInLead')}</p>
+
+      <div role="tablist" aria-label={t('auth.signInWith')} className="grid grid-cols-2 p-1 rounded-control bg-sunken mb-5">
+        {[['email', Mail, t('auth.email')], ['phone', Phone, t('auth.phone')]].map(([m, Icon, label]) => (
+          <button key={m} role="tab" type="button" aria-selected={method === m}
+            onClick={() => { setMethod(m); setError(''); }}
+            className={cn('h-9 rounded-[8px] inline-flex items-center justify-center gap-2 text-sm font-medium transition-colors',
+              method === m ? 'bg-surface text-ink shadow-panel' : 'text-ink-2 hover:text-ink')}>
+            <Icon size={16} aria-hidden /> {label}
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {ErrorLine}
+        {method === 'email' ? (
+          <Field label={t('auth.email')}>
+            {(p) => <Input {...p} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required className="h-11" />}
+          </Field>
+        ) : (
+          <Field label={t('auth.phoneNumber')}>
+            {(p) => <PhoneInput id={p.id} onChange={setPhone} required />}
+          </Field>
+        )}
+        <Field label={t('auth.password')}>
+          {(p) => (
+            <div className="relative">
+              <Input {...p} type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password}
+                onChange={(e) => setPassword(e.target.value)} required className="h-11 pr-11" />
+              <button type="button" onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 grid place-items-center text-ink-3 hover:text-ink rounded-[8px]">
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          )}
+        </Field>
+        <Button type="submit" size="lg" className="w-full justify-center" loading={loading}>{t('auth.signIn')}</Button>
+      </form>
+
+      <p className="mt-6 text-sm text-ink-2">
+        {t('auth.noAccount')}{' '}
+        <Link to="/register" className="text-brand font-medium hover:underline underline-offset-4">{t('auth.createAccount')}</Link>
+      </p>
+    </AuthShell>
   );
 };
 

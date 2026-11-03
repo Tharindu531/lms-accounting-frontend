@@ -11,6 +11,8 @@ if (API_URL && !API_URL.startsWith('http')) {
 
 const api = axios.create({
   baseURL: API_URL,
+  // A stalled request ends with a clear error instead of an endless spinner.
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -51,6 +53,15 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // A GET that failed on the network (mobile data dropping, timeout) is safe to
+    // repeat, so retry it once before showing an error.
+    if (!error.response && originalRequest && !originalRequest._networkRetry &&
+        (originalRequest.method || 'get').toLowerCase() === 'get' && !axios.isCancel(error)) {
+      originalRequest._networkRetry = true;
+      await new Promise((r) => setTimeout(r, 800));
+      return api(originalRequest);
+    }
+
     // Only intercept 401s; skip refresh endpoint to avoid infinite loop
     if (
       error.response?.status !== 401 ||
@@ -82,7 +93,7 @@ api.interceptors.response.use(
     }
 
     try {
-      const response = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken });
+      const response = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken }, { timeout: 20000 });
       const { accessToken, refreshToken: newRefresh, user } = response.data.data;
 
       setToken(accessToken);
@@ -120,6 +131,8 @@ export const paymentAPI = {
   getHistory: () => api.get('/api/payments/history'),
   create: (data) => api.post('/api/payments', data),
   getByMonth: (year, month) => api.get(`/api/payments/month/${year}/${month}`),
+  getSheet: (year, month, params = {}) => api.get(`/api/payments/month/${year}/${month}/sheet`, { params }),
+  createBulk: (data) => api.post('/api/payments/bulk', data),
   getByUser: (userId) => api.get(`/api/payments/user/${userId}`),
   delete: (id) => api.delete(`/api/payments/${id}`),
 };
@@ -141,6 +154,7 @@ export const quizAPI = {
   getAll: () => api.get('/api/quizzes'),
   getForAttempt: (id) => api.get(`/api/quizzes/${id}/attempt`),
   submit: (data) => api.post('/api/quizzes/submit', data),
+  saveDraft: (quizId, answers) => api.put(`/api/quizzes/${quizId}/draft`, { answers }),
   getMyResults: () => api.get('/api/quizzes/my-results'),
   getMyQuizResult: (quizId) => api.get(`/api/quizzes/my-results/${quizId}`),
   // Admin
@@ -149,6 +163,10 @@ export const quizAPI = {
   update: (id, data) => api.put(`/api/quizzes/${id}`, data),
   delete: (id) => api.delete(`/api/quizzes/${id}`),
   addQuestion: (quizId, data) => api.post(`/api/quizzes/${quizId}/questions`, data),
+  updateQuestion: (quizId, questionId, data) => api.put(`/api/quizzes/${quizId}/questions/${questionId}`, data),
+  removeQuestion: (quizId, questionId) => api.delete(`/api/quizzes/${quizId}/questions/${questionId}`),
+  reorderQuestions: (quizId, ids) => api.put(`/api/quizzes/${quizId}/questions/order`, ids),
+  duplicate: (quizId) => api.post(`/api/quizzes/${quizId}/duplicate`),
   // Create from units
   createFromUnits: (data) => api.post('/api/quizzes/from-units', data),
   // Question Bank

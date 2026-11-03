@@ -1,68 +1,171 @@
 @import "tailwindcss";
+@import "@fontsource-variable/ibm-plex-sans/wght.css";
+@import "@fontsource-variable/noto-sans-sinhala/wght.css";
 
-html, body, #root {
-  height: 100%;
-}
+/* Dark mode follows a class on <html> (set by ThemeProvider, and before first paint
+   by the inline script in index.html) so the user's choice wins over the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-body {
-  margin: 0;
-  font-family: 'Noto Sans Sinhala', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.youtube-container {
-  position: relative;
-  padding-bottom: 56.25%;
-  height: 0;
-  overflow: hidden;
-}
-
-.youtube-container iframe {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* Independent, modern thin scrollbars for scroll regions (main content) */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
-}
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(99, 102, 241, 0.35);
-  border-radius: 9999px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(99, 102, 241, 0.6);
+/* ------------------------------------------------------------------
+   Design tokens. Components use the semantic names (bg-surface,
+   text-ink-2, border-line, bg-brand ...), never raw palette colours,
+   so light and dark come from this one place.
+   ------------------------------------------------------------------ */
+:root {
+  --paper: #f5f7fb;          /* page background: a cool exercise-book page */
+  --surface: #ffffff;        /* panels */
+  --sunken: #eef1f7;         /* inputs, hovered rows, tracks */
+  --line: #dde2ec;           /* hairlines */
+  --line-strong: #c3cad8;
+  --ink: #172033;            /* primary text */
+  --ink-2: #4d5872;          /* secondary text */
+  --ink-3: #5f687d;          /* captions: 4.7:1 or better on every light surface */
+  --brand: #1d3a8f;          /* ledger ink blue: the one accent */
+  --brand-strong: #152c6e;
+  --brand-soft: #e7edfb;
+  --on-brand: #ffffff;
+  --credit: #1f7a4d;         /* paid, complete, correct */
+  --credit-soft: #e3f3ea;
+  --debit: #b42318;          /* overdue, wrong, destructive */
+  --debit-soft: #fdecea;
+  --due: #b45309;            /* due soon, timer warning */
+  --due-soft: #fdf1e3;
+  --focus: #2f5bd3;
+  --chart: #2f4fb3;          /* validated: lightness band + 3:1 on surface */
+  --shadow: 0 1px 2px rgb(23 32 51 / 0.06), 0 1px 1px rgb(23 32 51 / 0.04);
+  --shadow-pop: 0 12px 32px -8px rgb(23 32 51 / 0.22), 0 2px 6px rgb(23 32 51 / 0.08);
+  color-scheme: light;
 }
 
-/* Scrollbar variant for the dark sidebar */
-.sidebar-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+.dark {
+  --paper: #0e1424;
+  --surface: #151c2f;
+  --sunken: #1c2539;
+  --line: #273149;
+  --line-strong: #36425f;
+  --ink: #e6eaf2;
+  --ink-2: #a9b3c8;
+  --ink-3: #8a95ad;
+  --brand: #7d9cff;
+  --brand-strong: #a3b9ff;
+  --brand-soft: #1d2a4d;
+  --on-brand: #0e1424;
+  --credit: #4cc38a;
+  --credit-soft: #15301f;
+  --debit: #ff8a7a;
+  --debit-soft: #3a1b1a;
+  --due: #f0a54a;
+  --due-soft: #33240f;
+  --focus: #9db4ff;
+  --chart: #6a86e8;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
 }
-.sidebar-scrollbar::-webkit-scrollbar {
-  width: 6px;
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-on-brand: var(--on-brand);
+  --color-credit: var(--credit);
+  --color-credit-soft: var(--credit-soft);
+  --color-debit: var(--debit);
+  --color-debit-soft: var(--debit-soft);
+  --color-due: var(--due);
+  --color-due-soft: var(--due-soft);
+  --color-focus: var(--focus);
+  --color-chart: var(--chart);
+  --shadow-panel: var(--shadow);
+  --shadow-pop: var(--shadow-pop);
 }
-.sidebar-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+
+@theme {
+  /* IBM Plex for Latin text and figures; the browser falls back per glyph to Noto
+     Sans Sinhala, so mixed Sinhala/English lines render with both, self-hosted. */
+  --font-sans: "IBM Plex Sans Variable", "Noto Sans Sinhala Variable", ui-sans-serif, system-ui, sans-serif;
+  --radius-panel: 14px;
+  --radius-control: 10px;
+  --breakpoint-xs: 420px;
 }
-.sidebar-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.25);
-  border-radius: 9999px;
+
+@layer base {
+  html, body, #root { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15.5px;
+    line-height: 1.6;          /* Sinhala vowel signs need the extra room */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 { letter-spacing: -0.01em; line-height: 1.25; text-wrap: balance; }
+  p { text-wrap: pretty; }
+
+  /* Figures line up in scores, money and timers. */
+  .tabular, td, time { font-variant-numeric: tabular-nums; }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection { background: var(--brand-soft); color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
-.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.4);
+
+@layer components {
+  /* Accounting convention: a final total is double-underlined. Used only for
+     totals the student cares about (score, amount due), never as decoration. */
+  .ledger-total {
+    text-decoration-line: underline;
+    text-decoration-style: double;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.28em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+
+  .youtube-container { position: relative; aspect-ratio: 16 / 9; overflow: hidden; }
+  .youtube-container iframe, .youtube-container > div { position: absolute; inset: 0; width: 100%; height: 100%; }
+}
+
+@keyframes skeleton-pulse { 50% { opacity: 0.55; } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translate(var(--tw-translate-x, 0), calc(var(--tw-translate-y, 0) + 8px)) scale(0.98); } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+
+/* Printing a receipt prints only the receipt. */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 24px; color: #000; background: #fff; }
 }

@@ -1,516 +1,108 @@
-import { useCallback, useEffect, useState } from 'react';
-import { quizAPI, unitAPI, fileAPI } from '../../services/api';
-import { HelpCircle, Plus, Edit2, Trash2, X, Save, Filter, BarChart3, Upload, Paperclip } from 'lucide-react';
-import FileUpload, { FileList } from '../../components/FileUpload';
-import FileViewer from '../../components/FileViewer';
+import { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Database, Plus, Pencil, Trash2, PenLine, CheckCircle2, Paperclip } from 'lucide-react';
+import { quizAPI, unitAPI } from '../../services/api';
+import { unwrap } from '../../lib/queryClient';
+import { errorMessage } from '../../lib/errors';
+import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Select } from '../../components/ui/primitives';
+import { useConfirm } from '../../components/ui/Confirm';
+import Button from '../../components/ui/Button';
+import SearchInput from '../../components/admin/SearchInput';
+import QuestionEditor from '../../components/admin/QuestionEditor';
+import { cn } from '../../lib/cn';
 
 const QuestionBank = () => {
-  const [questions, setQuestions] = useState([]);
-  const [units, setUnits] = useState([]);
-  const [stats, setStats] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [showStatsModal, setShowStatsModal] = useState(false);
-  const [editingQuestion, setEditingQuestion] = useState(null);
-  const [filterUnitId, setFilterUnitId] = useState('');
-  const [attachments, setAttachments] = useState([]);
-  const [viewingFile, setViewingFile] = useState(null);
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const [unitId, setUnitId] = useState('');
+  const [type, setType] = useState('');
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [editorKey, setEditorKey] = useState(0);
 
-  const [form, setForm] = useState({
-    questionText: '',
-    questionType: 'MCQ',
-    optionA: '',
-    optionB: '',
-    optionC: '',
-    optionD: '',
-    optionE: '',
-    correctAnswer: 'A',
-    marks: 1,
-    unitId: ''
-  });
+  const bank = useQuery({ queryKey: ['admin', 'bank', unitId], queryFn: () => quizAPI.getQuestionBank(unitId || null).then(unwrap) });
+  const stats = useQuery({ queryKey: ['admin', 'bank-stats'], queryFn: () => quizAPI.getQuestionBankStats().then(unwrap) });
+  const units = useQuery({ queryKey: ['admin', 'units'], queryFn: () => unitAPI.getAll().then(unwrap) });
+  const unitList = (units.data ?? []).filter((u) => u.isActive !== false).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [questionsRes, unitsRes] = await Promise.all([
-        quizAPI.getQuestionBank(filterUnitId || null),
-        unitAPI.getActive()
-      ]);
-      setQuestions(questionsRes.data.data || []);
-      setUnits(unitsRes.data.data || []);
-    } catch (err) {
-      console.error('Failed to load data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterUnitId]);
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (bank.data ?? []).filter((x) => (!type || x.questionType === type) && (!q || x.questionText?.toLowerCase().includes(q)));
+  }, [bank.data, search, type]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['admin', 'bank'] }); qc.invalidateQueries({ queryKey: ['admin', 'bank-stats'] }); qc.invalidateQueries({ queryKey: ['admin', 'units'] }); };
+  const open = (q) => { setEditorKey((k) => k + 1); setEditing(q ?? 'new'); };
 
-  const fetchStats = async () => {
-    try {
-      const response = await quizAPI.getQuestionBankStats();
-      setStats(response.data.data || []);
-      setShowStatsModal(true);
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-    }
+  const remove = async (q) => {
+    if (!(await confirm({ title: 'Delete this question from the bank?', description: 'Quizzes already built from it keep their copy.', confirmLabel: 'Delete question', tone: 'danger' }))) return;
+    try { await quizAPI.deleteBankQuestion(q.id); toast.success('Question deleted'); refresh(); } catch (e) { toast.error(errorMessage(e)); }
   };
 
-  const fetchAttachments = async (questionId) => {
-    try {
-      const response = await fileAPI.getQuestionAttachments(questionId);
-      setAttachments(response.data.data || []);
-    } catch (err) {
-      console.error('Failed to load attachments:', err);
-    }
-  };
-
-  const handleFileUpload = async (file) => {
-    if (!editingQuestion) {
-      alert('Please save the question first before uploading files.');
-      return;
-    }
-    await fileAPI.uploadForQuestion(editingQuestion.id, file);
-    await fetchAttachments(editingQuestion.id);
-  };
-
-  const handleFileDelete = async (attachmentId) => {
-    if (!confirm('Delete this file?')) return;
-    try {
-      await fileAPI.delete(attachmentId);
-      await fetchAttachments(editingQuestion.id);
-    } catch (err) {
-      console.error('Failed to delete file:', err);
-      alert('Failed to delete file');
-    }
-  };
-
-  const openModal = async (question = null) => {
-    if (question) {
-      setEditingQuestion(question);
-      setForm({
-        questionText: question.questionText,
-        questionType: question.questionType || 'MCQ',
-        optionA: question.optionA || '',
-        optionB: question.optionB || '',
-        optionC: question.optionC || '',
-        optionD: question.optionD || '',
-        optionE: question.optionE || '',
-        correctAnswer: question.correctAnswer || 'A',
-        marks: question.marks || 1,
-        unitId: question.unitId || ''
-      });
-      await fetchAttachments(question.id);
-    } else {
-      setEditingQuestion(null);
-      setForm({
-        questionText: '',
-        questionType: 'MCQ',
-        optionA: '',
-        optionB: '',
-        optionC: '',
-        optionD: '',
-        optionE: '',
-        correctAnswer: 'A',
-        marks: 1,
-        unitId: filterUnitId || ''
-      });
-      setAttachments([]);
-    }
-    setShowModal(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const data = {
-      ...form,
-      unitId: form.unitId ? parseInt(form.unitId) : null
-    };
-
-    // Clear MCQ fields for WRITING questions
-    if (form.questionType === 'WRITING') {
-      data.optionA = null;
-      data.optionB = null;
-      data.optionC = null;
-      data.optionD = null;
-      data.optionE = null;
-    }
-
-    try {
-      if (editingQuestion) {
-        await quizAPI.updateBankQuestion(editingQuestion.id, data);
-        fetchData();
-        setShowModal(false);
-      } else {
-        const response = await quizAPI.addToQuestionBank(data);
-        const newQuestion = response.data.data;
-        setEditingQuestion(newQuestion);
-        fetchData();
-        alert('Question created! You can now upload files.');
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save question');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this question?')) return;
-
-    try {
-      await quizAPI.deleteBankQuestion(id);
-      fetchData();
-    } catch (err) {
-      console.error('Failed to delete question:', err);
-      alert('Failed to delete question');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  const totals = (stats.data ?? []).reduce((a, s) => ({ mcq: a.mcq + s.mcqCount, writing: a.writing + s.writingCount }), { mcq: 0, writing: 0 });
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Question Bank</h1>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={fetchStats}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-          >
-            <BarChart3 size={20} />
-            Stats
-          </button>
-          <button
-            onClick={() => openModal()}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-          >
-            <Plus size={20} />
-            Add Question
-          </button>
-        </div>
-      </div>
+      <PageHeader title="Question bank" description="Reusable questions, filed by unit. Build quizzes from them under Quizzes → From question bank."
+        actions={<Button icon={Plus} onClick={() => open(null)}>New question</Button>} />
 
-      {/* Filter */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <Filter size={20} className="text-gray-400" />
-          <select
-            value={filterUnitId}
-            onChange={(e) => setFilterUnitId(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-          >
-            <option value="">All Units</option>
-            {units.map(unit => (
-              <option key={unit.id} value={unit.id}>{unit.name}</option>
+      <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)] items-start">
+        <Panel as="nav" aria-label="Units" className="overflow-hidden">
+          <p className="px-4 pt-3.5 pb-2 text-sm font-semibold">{totals.mcq + totals.writing} questions <span className="font-normal text-ink-3">· {totals.mcq} MCQ, {totals.writing} written</span></p>
+          <ul className="pb-2">
+            {[{ unitId: '', unitName: 'All units', totalCount: totals.mcq + totals.writing }, ...(stats.data ?? [])].map((s) => (
+              <li key={s.unitId || 'all'}>
+                <button type="button" onClick={() => setUnitId(String(s.unitId))} aria-current={String(unitId) === String(s.unitId) ? 'true' : undefined}
+                  className={cn('relative w-full flex items-center justify-between gap-2 px-4 h-10 text-sm text-left',
+                    String(unitId) === String(s.unitId) ? 'bg-brand-soft/60 font-medium before:absolute before:left-0 before:inset-y-2 before:w-[3px] before:rounded-full before:bg-brand' : 'hover:bg-sunken/60 text-ink-2')}>
+                  <span className="truncate">{s.unitName}</span><span className="tabular text-ink-3">{s.totalCount}</span>
+                </button>
+              </li>
             ))}
-          </select>
-          <span className="text-sm text-gray-500">{questions.length} questions found</span>
-        </div>
+          </ul>
+        </Panel>
+
+        <Panel>
+          <div className="flex flex-wrap gap-3 p-4 border-b border-line">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search questions" className="flex-1 min-w-56" />
+            <Select aria-label="Type" value={type} onChange={(e) => setType(e.target.value)} className="w-44">
+              <option value="">All types</option><option value="MCQ">Multiple choice</option><option value="WRITING">Written answer</option>
+            </Select>
+          </div>
+          {bank.isPending ? <SkeletonRows rows={5} /> : bank.isError ? <ErrorState description={errorMessage(bank.error)} onRetry={bank.refetch} />
+            : rows.length === 0 ? (
+              <EmptyState icon={Database} title={search || type ? 'No questions match' : 'No questions here yet'}
+                description={!search && !type ? 'Questions you add here can be drawn into quizzes at random.' : undefined}
+                action={!search && <Button icon={Plus} onClick={() => open(null)}>New question</Button>} />
+            ) : (
+              <ul className="divide-y divide-line">
+                {rows.map((q) => (
+                  <li key={q.id} className="px-4 py-3.5 flex gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-wrap">{q.questionText}</p>
+                      <p className="text-xs text-ink-3 mt-1 flex flex-wrap gap-x-3">
+                        {q.questionType === 'WRITING' ? <span className="inline-flex items-center gap-1"><PenLine size={12} aria-hidden />Written</span>
+                          : <span className="inline-flex items-center gap-1 text-credit"><CheckCircle2 size={12} aria-hidden />{q.correctAnswer}. {q[`option${q.correctAnswer}`]}</span>}
+                        {q.unitName && <span>{q.unitName}</span>}
+                        {q.attachments?.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip size={12} aria-hidden />{q.attachments.length}</span>}
+                      </p>
+                    </div>
+                    <Badge className="shrink-0">{q.marks} mark{q.marks === 1 ? '' : 's'}</Badge>
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon-sm" aria-label="Edit question" onClick={() => open(q)}><Pencil size={15} /></Button>
+                      <Button variant="danger-ghost" size="icon-sm" aria-label="Delete question" onClick={() => remove(q)}><Trash2 size={15} /></Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+        </Panel>
       </div>
 
-      {questions.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <HelpCircle className="mx-auto text-gray-300 mb-4" size={48} />
-          <h2 className="text-xl font-semibold text-gray-600 mb-2">No Questions</h2>
-          <p className="text-gray-500">Add questions to the bank to use them in quizzes.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {questions.map((question) => (
-            <div key={question.id} className="bg-white rounded-xl shadow-sm p-6">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${
-                      question.questionType === 'WRITING'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {question.questionType || 'MCQ'}
-                    </span>
-                    {question.unitName && (
-                      <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                        {question.unitName}
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
-                  </div>
-                  <p className="text-gray-800 font-medium whitespace-pre-wrap">{question.questionText}</p>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <button
-                    onClick={() => openModal(question)}
-                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(question.id)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-
-              {question.questionType !== 'WRITING' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                  {['A', 'B', 'C', 'D', 'E'].map(opt => (
-                    <div
-                      key={opt}
-                      className={`p-2 rounded text-sm whitespace-pre-wrap ${
-                        question.correctAnswer === opt
-                          ? 'bg-green-100 text-green-800 border border-green-300'
-                          : 'bg-gray-50 text-gray-600'
-                      }`}
-                    >
-                      <span className="font-medium">{opt}.</span> {question[`option${opt}`]}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {question.questionType === 'WRITING' && question.correctAnswer && (
-                <div className="mt-3 p-3 bg-green-50 rounded-lg">
-                  <p className="text-xs text-green-700 font-medium mb-1">Expected Answer:</p>
-                  <p className="text-sm text-green-800 whitespace-pre-wrap">{question.correctAnswer}</p>
-                </div>
-              )}
-
-              {/* Inline image preview */}
-              {question.attachments && question.attachments.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {question.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
-                    <div key={file.id} className="rounded-lg overflow-hidden border border-gray-200 max-w-xs">
-                      <img
-                        src={file.url || file.presignedUrl}
-                        alt={file.originalFileName}
-                        className="w-full max-h-48 object-contain bg-gray-50 cursor-pointer hover:opacity-90 transition"
-                        onClick={() => setViewingFile(file)}
-                      />
-                    </div>
-                  ))}
-                  {question.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
-                    <button
-                      key={file.id}
-                      onClick={() => setViewingFile(file)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border rounded-lg hover:bg-indigo-50 transition text-sm"
-                    >
-                      <Paperclip size={14} className="text-blue-600" />
-                      {file.originalFileName}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Question Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {editingQuestion ? 'Edit Question' : 'Add Question to Bank'}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="Close"
-              >
-                <X size={22} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit</label>
-                  <select
-                    value={form.unitId}
-                    onChange={(e) => setForm({ ...form, unitId: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  >
-                    <option value="">No Unit</option>
-                    {units.map(unit => (
-                      <option key={unit.id} value={unit.id}>{unit.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Question Type *</label>
-                  <select
-                    value={form.questionType}
-                    onChange={(e) => setForm({ ...form, questionType: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  >
-                    <option value="MCQ">Multiple Choice (MCQ)</option>
-                    <option value="WRITING">Writing / Typing</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Question *</label>
-                <textarea
-                  value={form.questionText}
-                  onChange={(e) => setForm({ ...form, questionText: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              {form.questionType === 'MCQ' && (
-                <>
-                  {['A', 'B', 'C', 'D', 'E'].map((option) => (
-                    <div key={option}>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Option {option} *</label>
-                      <input
-                        type="text"
-                        value={form[`option${option}`]}
-                        onChange={(e) => setForm({ ...form, [`option${option}`]: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                        required
-                      />
-                    </div>
-                  ))}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Correct Answer *</label>
-                    <select
-                      value={form.correctAnswer}
-                      onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    >
-                      {['A', 'B', 'C', 'D', 'E'].map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {form.questionType === 'WRITING' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Expected Answer (for admin reference)
-                  </label>
-                  <textarea
-                    value={form.correctAnswer}
-                    onChange={(e) => setForm({ ...form, correctAnswer: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                    rows={3}
-                    placeholder="Model answer or key points for marking reference"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Marks</label>
-                <input
-                  type="number"
-                  value={form.marks}
-                  onChange={(e) => setForm({ ...form, marks: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  min={1}
-                />
-              </div>
-
-              {/* File Upload Section */}
-              {editingQuestion && (
-                <div className="border-t pt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Paperclip size={16} className="inline mr-1" />
-                    Attachments (Images, PDFs)
-                  </label>
-                  <FileUpload
-                    onUpload={handleFileUpload}
-                    accept=".jpg,.jpeg,.png,.gif,.pdf"
-                    maxSize={20}
-                    multiple={true}
-                  />
-                  <FileList
-                    files={attachments}
-                    onDelete={handleFileDelete}
-                    showDelete={true}
-                  />
-                </div>
-              )}
-
-              {!editingQuestion && (
-                <p className="text-sm text-gray-500 italic">
-                  Save the question first to upload files.
-                </p>
-              )}
-
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600">
-                  Cancel
-                </button>
-                <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                  <Save size={18} />
-                  {editingQuestion ? 'Update' : 'Add to Bank'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Stats Modal */}
-      {showStatsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
-              <h2 className="text-xl font-semibold text-gray-800">Question Bank Statistics</h2>
-              <button
-                onClick={() => setShowStatsModal(false)}
-                className="p-1.5 -m-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                aria-label="Close"
-              >
-                <X size={22} />
-              </button>
-            </div>
-
-            <div className="p-6">
-              {stats.length === 0 ? (
-                <p className="text-gray-500 text-center">No statistics available</p>
-              ) : (
-                <div className="space-y-3">
-                  {stats.map((stat) => (
-                    <div key={stat.unitId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-gray-800">{stat.unitName}</p>
-                        <p className="text-sm text-gray-500">
-                          {stat.mcqCount} MCQ + {stat.writingCount} Writing
-                        </p>
-                      </div>
-                      <div className="text-2xl font-bold text-indigo-600">{stat.totalCount}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* File Viewer Modal */}
-      {viewingFile && (
-        <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
+      {editing && (
+        <QuestionEditor key={editorKey} open units={unitList} defaultUnitId={unitId} question={editing === 'new' ? null : editing}
+          onOpenChange={(o) => { if (!o) { setEditing(null); refresh(); } }}
+          onSave={async (data, id) => unwrap(await (id ? quizAPI.updateBankQuestion(id, data) : quizAPI.addToQuestionBank(data)))} />
       )}
     </div>
   );

@@ -1,92 +1,57 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { GraduationCap, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { authAPI } from '../services/api';
+import { errorMessage } from '../lib/errors';
+import AuthShell from '../components/auth/AuthShell';
 
 const VerifyEmail = () => {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState('loading'); // loading | success | error
-  const [message, setMessage] = useState('');
+  const token = searchParams.get('token');
+  const [status, setStatus] = useState(token ? 'loading' : 'error');
+  const [message, setMessage] = useState(token ? '' : t('verifyEmail.noToken'));
 
   useEffect(() => {
+    if (!token) return undefined;
     let cancelled = false;
-
-    const verify = async () => {
-      const token = searchParams.get('token');
-      if (!token) {
-        if (!cancelled) {
-          setStatus('error');
-          setMessage('Invalid verification link. No token provided.');
-        }
-        return;
-      }
-
-      try {
-        const res = await authAPI.verifyEmail(token);
-        if (!cancelled) {
-          setStatus('success');
-          setMessage(res.data?.message || 'Email verified successfully.');
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setStatus('error');
-          setMessage(err.response?.data?.message || 'Verification failed. Please try again.');
-        }
-      }
-    };
-
-    verify();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams]);
+    authAPI.verifyEmail(token)
+      .then(() => { if (!cancelled) setStatus('success'); })
+      .catch((err) => { if (!cancelled) { setStatus('error'); setMessage(errorMessage(err, t('verifyEmail.failed'))); } });
+    return () => { cancelled = true; };
+  }, [token, t]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center">
-        {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <GraduationCap className="text-indigo-600" size={40} />
-          <h1 className="text-2xl font-bold text-gray-800">Accounting with Indika Amarakoon</h1>
-        </div>
-
+    <AuthShell>
+      <div role="status" aria-live="polite">
         {status === 'loading' && (
-          <div className="py-8">
-            <Loader2 className="animate-spin text-indigo-600 mx-auto mb-4" size={48} />
-            <p className="text-gray-600 text-lg">Verifying your email...</p>
-          </div>
+          <>
+            <Loader2 size={28} className="animate-spin text-brand mb-4" aria-hidden />
+            <h1 className="text-2xl font-semibold">{t('verifyEmail.checking')}</h1>
+          </>
         )}
-
         {status === 'success' && (
-          <div className="py-8">
-            <CheckCircle className="text-green-500 mx-auto mb-4" size={64} />
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">Email Verified!</h2>
-            <p className="text-gray-600 mb-8">{message}</p>
-            <Link
-              to="/login"
-              className="inline-block w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition"
-            >
-              Go to Login
-            </Link>
-          </div>
+          <>
+            <div className="h-11 w-11 rounded-full bg-credit-soft text-credit grid place-items-center mb-4"><CheckCircle2 size={22} aria-hidden /></div>
+            <h1 className="text-2xl font-semibold">{t('verifyEmail.doneTitle')}</h1>
+            <p className="text-ink-2 mt-2">{t('verifyEmail.doneHint')}</p>
+          </>
         )}
-
         {status === 'error' && (
-          <div className="py-8">
-            <XCircle className="text-red-500 mx-auto mb-4" size={64} />
-            <h2 className="text-2xl font-semibold text-gray-800 mb-2">Verification Failed</h2>
-            <p className="text-red-600 mb-8">{message}</p>
-            <Link
-              to="/login"
-              className="inline-block w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition"
-            >
-              Go to Login
-            </Link>
-          </div>
+          <>
+            <div className="h-11 w-11 rounded-full bg-debit-soft text-debit grid place-items-center mb-4"><XCircle size={22} aria-hidden /></div>
+            <h1 className="text-2xl font-semibold">{t('verifyEmail.failedTitle')}</h1>
+            <p className="text-ink-2 mt-2">{message}</p>
+          </>
         )}
       </div>
-    </div>
+      {status !== 'loading' && (
+        <Link to="/login" className="mt-7 inline-flex w-full justify-center items-center h-12 rounded-control bg-brand text-on-brand font-medium hover:bg-brand-strong">
+          {t('register.goToSignIn')}
+        </Link>
+      )}
+    </AuthShell>
   );
 };
 

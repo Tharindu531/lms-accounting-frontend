@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authAPI } from '../services/api';
 import { getToken, setToken, clearToken } from '../services/tokenStore';
 import {
@@ -10,6 +10,7 @@ import {
   storeUserSession,
 } from '../services/authSession';
 import AuthContext from './AuthContextStore';
+import { queryClient } from '../lib/queryClient';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -94,7 +95,7 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     const response = await authAPI.login(credentials);
     const result = response.data;
 
@@ -111,14 +112,14 @@ export const AuthProvider = ({ children }) => {
     setRequirePasswordChange(!!reqPC);
 
     return { user: userData, requirePasswordChange: reqPC, phoneVerificationRequired: false };
-  };
+  }, []);
 
-  const register = async (data) => {
+  const register = useCallback(async (data) => {
     const response = await authAPI.register(data);
     return response.data;
-  };
+  }, []);
 
-  const changePassword = async (currentPassword, newPassword) => {
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
     const response = await authAPI.changePassword({ currentPassword, newPassword });
     const { accessToken, refreshToken, user: userData } = response.data.data;
 
@@ -129,33 +130,32 @@ export const AuthProvider = ({ children }) => {
     setRequirePasswordChange(false);
 
     return userData;
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     clearToken();
     clearStoredSession();
     setUser(null);
     setRequirePasswordChange(false);
-  };
+    // Cached lists belong to the previous user; the next login starts clean.
+    queryClient.clear();
+  }, []);
 
   const isAdmin = user?.userType === 'ADMIN';
   const isInstructor = user?.userType === 'INSTRUCTOR';
   const isStudent = user?.userType === 'STUDENT';
 
+  const isAuthenticated = !!user && (!!getToken() || !!loadRefreshToken());
+
+  // One stable object per actual change, so consumers don't all re-render on every render.
+  const value = useMemo(() => ({
+    user, loading, login, register, logout, changePassword,
+    isAdmin, isInstructor, isStudent, isAuthenticated, requirePasswordChange,
+  }), [user, loading, login, register, logout, changePassword, isAdmin, isInstructor, isStudent,
+      isAuthenticated, requirePasswordChange]);
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      loading,
-      login,
-      register,
-      logout,
-      changePassword,
-      isAdmin,
-      isInstructor,
-      isStudent,
-      isAuthenticated: !!user && (!!getToken() || !!loadRefreshToken()),
-      requirePasswordChange
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

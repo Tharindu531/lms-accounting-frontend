@@ -1,8 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, Download, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
 
 const FileViewer = ({ file, onClose }) => {
   const [zoom, setZoom] = useState(100);
+
+  // Escape closes, and the page behind doesn't scroll while the viewer is open.
+  useEffect(() => {
+    if (!file) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [file, onClose]);
 
   if (!file) return null;
 
@@ -63,7 +73,7 @@ const FileViewer = ({ file, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex flex-col">
+    <div className="fixed inset-0 bg-black/90 z-[60] flex flex-col" role="dialog" aria-modal="true" aria-label={file.originalFileName || file.fileName}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 bg-gray-900 text-white">
         <div className="flex items-center gap-4">
@@ -76,16 +86,18 @@ const FileViewer = ({ file, onClose }) => {
             <>
               <button
                 onClick={() => setZoom(Math.max(25, zoom - 25))}
-                className="p-2 hover:bg-gray-700 rounded"
+                className="p-2.5 hover:bg-gray-700 rounded"
                 title="Zoom Out"
+                aria-label="Zoom Out"
               >
                 <ZoomOut size={20} />
               </button>
               <span className="text-sm w-16 text-center">{zoom}%</span>
               <button
                 onClick={() => setZoom(Math.min(200, zoom + 25))}
-                className="p-2 hover:bg-gray-700 rounded"
+                className="p-2.5 hover:bg-gray-700 rounded"
                 title="Zoom In"
+                aria-label="Zoom In"
               >
                 <ZoomIn size={20} />
               </button>
@@ -94,24 +106,27 @@ const FileViewer = ({ file, onClose }) => {
 
           <button
             onClick={handleOpenExternal}
-            className="p-2 hover:bg-gray-700 rounded"
+            className="p-2.5 hover:bg-gray-700 rounded"
             title="Open in New Tab"
+                aria-label="Open in New Tab"
           >
             <ExternalLink size={20} />
           </button>
 
           <button
             onClick={handleDownload}
-            className="p-2 hover:bg-gray-700 rounded"
+            className="p-2.5 hover:bg-gray-700 rounded"
             title="Download"
+                aria-label="Download"
           >
             <Download size={20} />
           </button>
 
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-700 rounded ml-2"
+            className="p-2.5 hover:bg-gray-700 rounded ml-2"
             title="Close"
+                aria-label="Close"
           >
             <X size={20} />
           </button>

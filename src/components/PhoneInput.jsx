@@ -27,7 +27,7 @@ const COUNTRIES = [
  *   required (bool)
  *   placeholder (string)
  */
-const PhoneInput = ({ onChange, required = false, placeholder = '771234567' }) => {
+const PhoneInput = ({ onChange, required = false, placeholder = '771234567', id }) => {
   const [country, setCountry] = useState(COUNTRIES[0]); // default: Sri Lanka
   const [local, setLocal] = useState('');
 
@@ -51,12 +51,12 @@ const PhoneInput = ({ onChange, required = false, placeholder = '771234567' }) =
   };
 
   return (
-    <div className="flex rounded-lg border border-gray-300 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition">
+    <div className="flex h-10 bg-surface rounded-control border border-line overflow-hidden transition-colors hover:border-line-strong focus-within:border-brand focus-within:ring-3 focus-within:ring-brand/15">
       {/* Country code selector */}
       <select
         value={country.code}
         onChange={handleCountryChange}
-        className="flex-shrink-0 bg-gray-50 border-r border-gray-300 pl-3 pr-1 py-3 text-sm text-gray-700 outline-none cursor-pointer hover:bg-gray-100 transition"
+        className="flex-shrink-0 bg-sunken border-r border-line pl-3 pr-1 text-sm text-ink outline-none cursor-pointer"
         aria-label="Country code"
       >
         {COUNTRIES.map(c => (
@@ -68,13 +68,15 @@ const PhoneInput = ({ onChange, required = false, placeholder = '771234567' }) =
 
       {/* Local number input */}
       <input
+        id={id}
         type="tel"
         inputMode="numeric"
+        autoComplete="tel-national"
         value={local}
         onChange={handleLocalChange}
         placeholder={placeholder}
         required={required}
-        className="flex-1 px-4 py-3 outline-none text-gray-800 placeholder-gray-400 bg-white"
+        className="flex-1 min-w-0 px-3 outline-none text-ink placeholder:text-ink-3 bg-transparent tabular"
       />
     </div>
   );

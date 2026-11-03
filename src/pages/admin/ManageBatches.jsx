@@ -1,279 +1,119 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Layers, Plus, Trash2, Pencil, AlertTriangle } from 'lucide-react';
 import { batchAPI } from '../../services/api';
-import { Layers, Plus, Trash2, X, Save, AlertTriangle, Users } from 'lucide-react';
+import { unwrap } from '../../lib/queryClient';
+import { errorMessage } from '../../lib/errors';
+import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, Input, Textarea, Table, Th, Td } from '../../components/ui/primitives';
+import { Modal } from '../../components/ui/Dialog';
+import Button from '../../components/ui/Button';
+
+const empty = { name: '', description: '', batchNumber: '' };
 
 const ManageBatches = () => {
-  const [batches, setBatches] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [selectedBatch, setSelectedBatch] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    batchNumber: ''
+  const qc = useQueryClient();
+  const batches = useQuery({ queryKey: ['admin', 'batches'], queryFn: () => batchAPI.getAll().then(unwrap) });
+  const [editing, setEditing] = useState(null);       // null | {} (new) | batch
+  const [form, setForm] = useState(empty);
+  const [deleting, setDeleting] = useState(null);
+  const [typed, setTyped] = useState('');
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['admin', 'batches'] });
+    qc.invalidateQueries({ queryKey: ['batches'] });
+  };
+
+  const save = useMutation({
+    mutationFn: (data) => (editing?.id ? batchAPI.update(editing.id, data) : batchAPI.create(data)),
+    onSuccess: () => { toast.success(editing?.id ? 'Batch updated' : 'Batch created'); setEditing(null); refresh(); },
+    onError: (e) => toast.error(errorMessage(e, 'The batch wasn\'t saved.')),
   });
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchBatches();
-  }, []);
+  const remove = useMutation({
+    mutationFn: (b) => batchAPI.delete(b.id),
+    onSuccess: () => { toast.success('Batch deleted'); setDeleting(null); refresh(); },
+    onError: (e) => toast.error(errorMessage(e, 'The batch wasn\'t deleted.')),
+  });
 
-  const fetchBatches = async () => {
-    try {
-      const response = await batchAPI.getAll();
-      setBatches(response.data.data || []);
-    } catch (err) {
-      console.error('Failed to load batches:', err);
-    } finally {
-      setLoading(false);
-    }
+  const open = (b) => {
+    setEditing(b ?? {});
+    setForm(b ? { name: b.name ?? '', description: b.description ?? '', batchNumber: String(b.batchNumber ?? '') } : empty);
   };
 
-  const openCreateModal = () => {
-    setFormData({ name: '', description: '', batchNumber: '' });
-    setError('');
-    setShowModal(true);
-  };
-
-  const handleSubmit = async (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    setError('');
-
-    try {
-      await batchAPI.create({
-        ...formData,
-        batchNumber: parseInt(formData.batchNumber)
-      });
-      fetchBatches();
-      setShowModal(false);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create batch');
-    }
+    save.mutate({ ...form, batchNumber: parseInt(form.batchNumber, 10) });
   };
 
-  const confirmDelete = (batch) => {
-    setSelectedBatch(batch);
-    setShowDeleteModal(true);
-  };
-
-  const handleDelete = async () => {
-    try {
-      await batchAPI.delete(selectedBatch.id);
-      fetchBatches();
-      setShowDeleteModal(false);
-      setSelectedBatch(null);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete batch');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  const list = [...(batches.data ?? [])].sort((a, b) => b.batchNumber - a.batchNumber);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Manage Batches</h1>
-        <button
-          onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-        >
-          <Plus size={20} />
-          Create Batch
-        </button>
-      </div>
+      <PageHeader title="Batches" description="Each batch is an exam year. Students choose theirs when they register."
+        actions={<Button icon={Plus} onClick={() => open(null)}>New batch</Button>} />
 
-      {/* Batches Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {batches.length === 0 ? (
-          <div className="p-12 text-center">
-            <Layers className="mx-auto text-gray-300 mb-4" size={48} />
-            <p className="text-gray-500">No batches created yet.</p>
-            <p className="text-sm text-gray-400 mt-2">Create a batch to allow student registration.</p>
-          </div>
+      <Panel>
+        {batches.isPending ? <SkeletonRows rows={3} /> : batches.isError ? (
+          <ErrorState description={errorMessage(batches.error)} onRetry={batches.refetch} />
+        ) : list.length === 0 ? (
+          <EmptyState icon={Layers} title="No batches yet" description="Create one so students can register into it."
+            action={<Button icon={Plus} onClick={() => open(null)}>New batch</Button>} />
         ) : (
-          <div className="overflow-x-auto custom-scrollbar"><table className="w-full min-w-[640px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Batch Number</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Name</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Description</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Students</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {batches.map((batch) => (
-                <tr key={batch.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <span className="font-mono text-lg font-semibold text-indigo-600">
-                      {batch.batchNumber}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="font-medium text-gray-800">{batch.name}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-gray-600 text-sm">{batch.description || '-'}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Users size={16} className="text-gray-400" />
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm font-medium">
-                        {batch.studentCount}
-                      </span>
+          <Table minWidth={640}>
+            <thead><tr><Th>Batch</Th><Th>Name</Th><Th>Description</Th><Th className="text-right">Students</Th><Th>Status</Th><Th className="w-24" /></tr></thead>
+            <tbody>
+              {list.map((b) => (
+                <tr key={b.id} className="hover:bg-sunken/50">
+                  <Td className="font-semibold tabular">{b.batchNumber}</Td>
+                  <Td className="font-medium">{b.name}</Td>
+                  <Td className="text-ink-2 max-w-72 truncate">{b.description || '—'}</Td>
+                  <Td className="text-right tabular">{b.studentCount}</Td>
+                  <Td>{b.isActive ? <Badge tone="credit">Open for registration</Badge> : <Badge>Closed</Badge>}</Td>
+                  <Td>
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon-sm" aria-label={`Edit ${b.name}`} onClick={() => open(b)}><Pencil size={16} /></Button>
+                      <Button variant="danger-ghost" size="icon-sm" aria-label={`Delete ${b.name}`} onClick={() => { setDeleting(b); setTyped(''); }}><Trash2 size={16} /></Button>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-sm ${
-                      batch.isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}>
-                      {batch.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => confirmDelete(batch)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                      title="Delete batch"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table></div>
+          </Table>
         )}
-      </div>
+      </Panel>
 
-      {/* Create Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
-              <h2 className="text-xl font-semibold text-gray-800">Create Batch</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
+      <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)} title={editing?.id ? 'Edit batch' : 'New batch'}
+        footer={<>
+          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+          <Button type="submit" form="batch-form" loading={save.isPending}>{editing?.id ? 'Save batch' : 'Create batch'}</Button>
+        </>}>
+        <form id="batch-form" onSubmit={submit} className="space-y-4">
+          <Field label="Exam year" required hint="Students' IDs start with this number, e.g. 2027_014.">
+            {(p) => <Input {...p} type="number" min="2000" max="2100" value={form.batchNumber} onChange={(e) => setForm({ ...form, batchNumber: e.target.value })} placeholder="2027" />}
+          </Field>
+          <Field label="Name" required>{(p) => <Input {...p} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="2027 A/L" />}</Field>
+          <Field label="Description">{(p) => <Textarea {...p} rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />}</Field>
+        </form>
+      </Modal>
+
+      <Modal open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)} size="sm" title={`Delete batch ${deleting?.batchNumber ?? ''}?`}
+        footer={<>
+          <Button variant="secondary" onClick={() => setDeleting(null)}>Cancel</Button>
+          <Button variant="danger" icon={Trash2} disabled={typed !== String(deleting?.batchNumber)} loading={remove.isPending} onClick={() => remove.mutate(deleting)}>Delete batch</Button>
+        </>}>
+        {deleting && (
+          <div className="space-y-4 text-sm">
+            <div className="flex gap-3 rounded-control bg-debit-soft text-debit p-3">
+              <AlertTriangle size={18} className="shrink-0 mt-0.5" aria-hidden />
+              <p>This permanently deletes <strong>{deleting.studentCount} student{deleting.studentCount === 1 ? '' : 's'}</strong> in this batch, with their payments and quiz results. It can't be undone.</p>
             </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Batch Number *</label>
-                <input
-                  type="number"
-                  value={formData.batchNumber}
-                  onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  placeholder="e.g., 1"
-                  min={1}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Batch Name *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  placeholder="e.g., Batch 2024 January"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  placeholder="Optional description for this batch"
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600">
-                  Cancel
-                </button>
-                <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                  <Save size={18} />
-                  Create Batch
-                </button>
-              </div>
-            </form>
+            <Field label={`Type ${deleting.batchNumber} to confirm`}>
+              {(p) => <Input {...p} inputMode="numeric" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />}
+            </Field>
           </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && selectedBatch && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="p-3 bg-red-100 rounded-full">
-                  <AlertTriangle className="text-red-600" size={24} />
-                </div>
-                <h2 className="text-xl font-semibold text-gray-800">Delete Batch</h2>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                <p className="text-amber-800 font-medium">Warning: This action cannot be undone!</p>
-                <p className="text-amber-700 text-sm mt-1">
-                  Deleting <strong>Batch {selectedBatch.batchNumber} ({selectedBatch.name})</strong> will also delete:
-                </p>
-                <ul className="text-amber-700 text-sm mt-2 list-disc list-inside">
-                  <li><strong>{selectedBatch.studentCount}</strong> student(s) in this batch</li>
-                  <li>All payment records for these students</li>
-                  <li>All quiz results and lesson progress</li>
-                </ul>
-              </div>
-
-              <p className="text-gray-600 mb-6">
-                Are you sure you want to delete this batch and all associated data?
-              </p>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    setSelectedBatch(null);
-                  }}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                >
-                  <Trash2 size={18} />
-                  Delete Batch
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

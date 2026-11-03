@@ -1,156 +1,242 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import useAuth from '../context/useAuth';
-import {
-  Home, BookOpen, FileQuestion, Trophy, CreditCard,
-  Users, LogOut, Menu, X, BarChart3, Layers,
-  FolderOpen, Database, ClipboardCheck, GraduationCap
-} from 'lucide-react';
 import { useState } from 'react';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import {
+  Home, BookOpen, FileQuestion, Trophy, CreditCard, Users, LogOut, BarChart3, Layers,
+  FolderOpen, Database, ClipboardCheck, GraduationCap, KeyRound, Sun, Moon, Monitor, MoreHorizontal, WifiOff,
+} from 'lucide-react';
+import useAuth from '../context/useAuth';
+import { useTheme } from '../lib/theme';
+import { cn } from '../lib/cn';
+import { Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuRadioGroup, MenuRadioItem } from './ui/Menu';
+import { Modal } from './ui/Dialog';
+import useOnline from '../lib/useOnline';
 
-const Layout = ({ children }) => {
+const studentLinks = [
+  { to: '/dashboard', icon: Home, key: 'home', end: true },
+  { to: '/lessons', icon: BookOpen, key: 'lessons' },
+  { to: '/quizzes', icon: FileQuestion, key: 'quizzes' },
+  { to: '/results', icon: Trophy, key: 'results' },
+  { to: '/payments', icon: CreditCard, key: 'payments' },
+];
+
+const adminGroups = [
+  { key: null, links: [
+    { to: '/admin/dashboard', icon: BarChart3, key: 'analytics' },
+    { to: '/admin/marking', icon: ClipboardCheck, key: 'marking' },
+  ] },
+  { key: 'teach', links: [
+    { to: '/admin/units', icon: FolderOpen, key: 'units' },
+    { to: '/admin/lessons', icon: BookOpen, key: 'manageLessons' },
+    { to: '/admin/quizzes', icon: FileQuestion, key: 'manageQuizzes' },
+    { to: '/admin/question-bank', icon: Database, key: 'questionBank' },
+  ] },
+  { key: 'people', links: [
+    { to: '/admin/students', icon: Users, key: 'students' },
+    { to: '/admin/payments', icon: CreditCard, key: 'managePayments' },
+    { to: '/admin/instructors', icon: GraduationCap, key: 'instructors' },
+    { to: '/admin/batches', icon: Layers, key: 'batches' },
+  ] },
+];
+
+const instructorGroups = [
+  { key: null, links: [{ to: '/admin/marking', icon: ClipboardCheck, key: 'marking' }] },
+  { key: 'teach', links: adminGroups[1].links },
+];
+
+// Phone bottom bar: the five destinations used most. Everything else is under "More".
+const adminTabs = ['/admin/dashboard', '/admin/marking', '/admin/quizzes', '/admin/students'];
+const instructorTabs = ['/admin/marking', '/admin/lessons', '/admin/quizzes', '/admin/question-bank'];
+
+const initials = (u) => `${u?.firstName?.[0] ?? ''}${u?.lastName?.[0] ?? ''}`.toUpperCase() || '?';
+
+const LanguageSwitch = ({ className }) => {
+  const { i18n } = useTranslation();
+  const lang = i18n.language;
+  return (
+    <div role="group" aria-label="Language" className={cn('inline-flex h-11 lg:h-8 p-1 lg:p-0.5 rounded-[10px] bg-sunken text-xs font-medium', className)}>
+      {[['en', 'EN'], ['si', 'සිං']].map(([code, label]) => (
+        <button key={code} type="button" onClick={() => i18n.changeLanguage(code)} aria-pressed={lang === code}
+          className={cn('min-w-11 lg:min-w-0 px-2.5 rounded-[7px] transition-colors', lang === code ? 'bg-surface text-ink shadow-panel' : 'text-ink-2 hover:text-ink')}>
+          <span style={code === 'si' && lang !== 'si' ? { fontFamily: 'system-ui, sans-serif' } : undefined}>{label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+const AccountMenu = ({ compact = false }) => {
+  const { t, i18n } = useTranslation();
   const { user, logout, isAdmin, isInstructor } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const studentLinks = [
-    { to: '/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/lessons', icon: BookOpen, label: 'Lessons' },
-    { to: '/quizzes', icon: FileQuestion, label: 'Quizzes' },
-    { to: '/results', icon: Trophy, label: 'My Results' },
-    { to: '/payments', icon: CreditCard, label: 'Payments' },
-  ];
-
-  const adminLinks = [
-    { to: '/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/admin/dashboard', icon: BarChart3, label: 'Analytics' },
-    { to: '/admin/students', icon: Users, label: 'Students' },
-    { to: '/admin/instructors', icon: GraduationCap, label: 'Instructors' },
-    { to: '/admin/batches', icon: Layers, label: 'Manage Batches' },
-    { to: '/admin/units', icon: FolderOpen, label: 'Manage Units' },
-    { to: '/admin/lessons', icon: BookOpen, label: 'Manage Lessons' },
-    { to: '/admin/quizzes', icon: FileQuestion, label: 'Manage Quizzes' },
-    { to: '/admin/question-bank', icon: Database, label: 'Question Bank' },
-    { to: '/admin/marking', icon: ClipboardCheck, label: 'Admin Marking' },
-    { to: '/admin/payments', icon: CreditCard, label: 'Payments' },
-  ];
-
-  const instructorLinks = [
-    { to: '/admin/units', icon: FolderOpen, label: 'Units' },
-    { to: '/admin/lessons', icon: BookOpen, label: 'Lessons' },
-    { to: '/admin/quizzes', icon: FileQuestion, label: 'Quizzes' },
-    { to: '/admin/question-bank', icon: Database, label: 'Question Bank' },
-    { to: '/admin/marking', icon: ClipboardCheck, label: 'Marking' },
-  ];
-
-  const links = isAdmin ? adminLinks : isInstructor ? instructorLinks : studentLinks;
+  const role = isAdmin ? t('account.admin') : isInstructor ? t('account.instructor') : t('account.batch', { batch: user?.batch });
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-gray-50">
-      {/* Mobile header */}
-      <div className="lg:hidden flex-shrink-0 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-4 flex items-center justify-between shadow-md z-30">
-        <div className="flex items-center gap-2.5">
-          <img src="/photo.webp" alt="Logo" className="w-8 h-8 rounded-full object-cover border-2 border-indigo-300" />
-          <span className="font-semibold tracking-tight">Accounting</span>
-        </div>
-        <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 -m-2 rounded-lg hover:bg-white/10 active:bg-white/20 transition-colors"
-          aria-label="Toggle menu"
-        >
-          {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar */}
-        <aside className={`
-          fixed lg:static inset-y-0 left-0 z-50
-          w-72 lg:w-64 flex flex-col
-          bg-gradient-to-b from-indigo-600 to-indigo-800 text-white
-          shadow-xl lg:shadow-none
-          transform transition-transform duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0
-        `}>
-          {/* Logo */}
-          <div className="hidden lg:flex items-center gap-3 p-6 border-b border-white/10 flex-shrink-0">
-            <img src="/photo.webp" alt="Indika Amarakoon" className="w-10 h-10 rounded-full object-cover border-2 border-indigo-300 flex-shrink-0" />
-            <span className="text-lg font-bold leading-tight tracking-tight">Accounting with Indika Amarakoon</span>
-          </div>
-
-          {/* Mobile-only close spacer (keeps layout consistent under fixed overlay) */}
-          <div className="lg:hidden h-4 flex-shrink-0" />
-
-          {/* User info */}
-          <div className="mx-4 mt-2 lg:mt-4 p-4 rounded-xl bg-white/10 flex-shrink-0">
-            <p className="font-medium truncate">{user?.firstName} {user?.lastName}</p>
-            <p className="text-sm text-indigo-200 truncate">{user?.email || user?.phone}</p>
-            {!isAdmin && !isInstructor && (
-              <p className="text-xs text-indigo-200 mt-1 font-mono">ID: {user?.id}</p>
-            )}
-            {isInstructor && (
-              <p className="text-xs text-indigo-200 mt-1 font-mono">{user?.id}</p>
-            )}
-            <span className="inline-block mt-2 px-2.5 py-1 bg-white/15 rounded-full text-xs font-medium">
-              {isAdmin ? 'Admin' : isInstructor ? 'Instructor' : `Batch ${user?.batch}`}
+    <Menu>
+      <MenuTrigger asChild>
+        <button type="button" aria-label={t('account.openMenu')}
+          className={cn('flex items-center gap-3 rounded-control text-left hover:bg-sunken transition-colors',
+            compact ? 'p-1' : 'w-full p-2')}>
+          <span className="h-9 w-9 shrink-0 rounded-full bg-brand-soft text-brand grid place-items-center text-sm font-semibold">
+            {initials(user)}
+          </span>
+          {!compact && (
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-ink truncate">{user?.firstName} {user?.lastName}</span>
+              <span className="block text-xs text-ink-2 truncate">{role}</span>
             </span>
+          )}
+        </button>
+      </MenuTrigger>
+      <MenuContent align={compact ? 'end' : 'start'} side={compact ? 'bottom' : 'top'} className="w-64">
+        <div className="px-2.5 py-2">
+          <p className="text-sm font-medium text-ink truncate">{user?.firstName} {user?.lastName}</p>
+          <p className="text-xs text-ink-2 truncate">{user?.email || user?.phone}</p>
+          {!isAdmin && !isInstructor && (
+            <p className="text-xs text-ink-2 mt-0.5">{t('account.studentId')}: <span className="tabular text-ink">{user?.id}</span></p>
+          )}
+        </div>
+        <MenuSeparator />
+        <MenuLabel>{t('account.theme')}</MenuLabel>
+        <MenuRadioGroup value={theme} onValueChange={setTheme}>
+          <MenuRadioItem value="light"><span className="flex items-center gap-2.5"><Sun size={16} className="text-ink-3" />{t('account.light')}</span></MenuRadioItem>
+          <MenuRadioItem value="dark"><span className="flex items-center gap-2.5"><Moon size={16} className="text-ink-3" />{t('account.dark')}</span></MenuRadioItem>
+          <MenuRadioItem value="system"><span className="flex items-center gap-2.5"><Monitor size={16} className="text-ink-3" />{t('account.system')}</span></MenuRadioItem>
+        </MenuRadioGroup>
+        <MenuSeparator />
+        <MenuLabel>{t('account.language')}</MenuLabel>
+        <MenuRadioGroup value={i18n.language} onValueChange={(l) => i18n.changeLanguage(l)}>
+          <MenuRadioItem value="en">English</MenuRadioItem>
+          <MenuRadioItem value="si">සිංහල</MenuRadioItem>
+        </MenuRadioGroup>
+        <MenuSeparator />
+        <MenuItem icon={KeyRound} onSelect={() => navigate('/change-password')}>{t('account.changePassword')}</MenuItem>
+        <MenuItem icon={LogOut} tone="danger" onSelect={() => { logout(); navigate('/login'); }}>{t('account.signOut')}</MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+};
+
+const SideLink = ({ link, t, onNavigate }) => (
+  <NavLink to={link.to} end={link.end} onClick={onNavigate}
+    className={({ isActive }) => cn(
+      'relative flex items-center gap-3 h-10 pl-3.5 pr-3 rounded-control text-sm transition-colors',
+      isActive
+        ? 'bg-surface text-ink font-medium shadow-panel before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-full before:bg-brand'
+        : 'text-ink-2 hover:text-ink hover:bg-sunken')}>
+    {({ isActive }) => (<>
+      <link.icon size={18} className={isActive ? 'text-brand' : 'text-ink-3'} aria-hidden />
+      <span className="truncate">{t(`nav.${link.key}`)}</span>
+    </>)}
+  </NavLink>
+);
+
+const Brand = () => (
+  <Link to="/dashboard" className="flex items-center gap-3 min-w-0">
+    <img src="/avatar-96.webp" alt="" width="36" height="36" className="h-9 w-9 rounded-full object-cover ring-1 ring-line shrink-0" />
+    <span className="min-w-0 leading-tight">
+      <span className="block font-semibold text-ink text-[15px]">Accounting</span>
+      <span className="block text-xs text-ink-2 truncate">with Indika Amarakoon</span>
+    </span>
+  </Link>
+);
+
+const Layout = ({ children }) => {
+  const { t } = useTranslation();
+  const { isAdmin, isInstructor } = useAuth();
+  const online = useOnline();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const groups = isAdmin ? adminGroups : isInstructor ? instructorGroups : [{ key: null, links: studentLinks }];
+  const all = groups.flatMap((g) => g.links);
+  const tabPaths = isAdmin ? adminTabs : isInstructor ? instructorTabs : studentLinks.map((l) => l.to);
+  const tabs = tabPaths.map((p) => all.find((l) => l.to === p)).filter(Boolean);
+  const showMore = isAdmin || isInstructor;
+
+  return (
+    <div className="min-h-dvh lg:h-dvh lg:flex bg-paper">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:z-[60] focus:top-3 focus:left-3 focus:bg-surface focus:px-3 focus:py-2 focus:rounded-control focus:shadow-pop">
+        {t('common.skipToContent')}
+      </a>
+
+      {/* Desktop sidebar */}
+      <aside aria-label="Sidebar" className="hidden lg:flex w-[248px] shrink-0 flex-col border-r border-line">
+        <div className="px-5 pt-5 pb-4"><Brand /></div>
+        <nav className="flex-1 min-h-0 overflow-y-auto scroll-thin px-3 pb-4 space-y-5" aria-label="Main">
+          {groups.map((g, i) => (
+            <div key={i} className="space-y-0.5">
+              {g.key && <p className="px-3.5 pb-1 text-xs font-medium text-ink-3">{t(`nav.${g.key}`)}</p>}
+              {g.links.map((l) => <SideLink key={l.to} link={l} t={t} />)}
+            </div>
+          ))}
+        </nav>
+        <div className="p-3 border-t border-line space-y-2">
+          <LanguageSwitch className="ml-2" />
+          <AccountMenu />
+        </div>
+      </aside>
+
+      {/* Phone top bar */}
+      <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 h-14 bg-paper/90 backdrop-blur border-b border-line pt-[env(safe-area-inset-top)]">
+        <Brand />
+        <div className="flex items-center gap-2">
+          <LanguageSwitch />
+          <AccountMenu compact />
+        </div>
+      </header>
+
+      <main id="main" className="flex-1 min-w-0 lg:overflow-y-auto scroll-thin">
+        {!online && (
+          <div role="status" className="flex items-center gap-2 px-4 lg:px-8 py-2 bg-due-soft text-due text-sm">
+            <WifiOff size={16} aria-hidden /> {t('common.offline')}
           </div>
-
-          {/* Navigation — its own independent scroll region */}
-          <nav className="flex-1 min-h-0 overflow-y-auto sidebar-scrollbar p-4 space-y-1 mt-2">
-            {links.map((link) => {
-              const IconComponent = link.icon;
-              const isActive = location.pathname === link.to;
-              return (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setSidebarOpen(false)}
-                className={`
-                  group flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-150
-                  ${isActive
-                    ? 'bg-white text-indigo-700 shadow-md font-semibold'
-                    : 'text-indigo-100 hover:bg-white/10 hover:text-white'}
-                `}
-              >
-                <IconComponent size={19} className={isActive ? 'text-indigo-600' : 'text-indigo-200 group-hover:text-white transition-colors'} />
-                <span className="text-sm">{link.label}</span>
-              </Link>
-              );
-            })}
-          </nav>
-
-          {/* Logout — pinned via flex, not absolute positioning */}
-          <div className="flex-shrink-0 p-4 border-t border-white/10">
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 w-full px-4 py-2.5 text-indigo-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors"
-            >
-              <LogOut size={19} />
-              <span className="text-sm font-medium">Logout</span>
-            </button>
-          </div>
-        </aside>
-
-        {/* Overlay */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-40 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
         )}
-
-        {/* Main content — its own independent scroll region */}
-        <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-6 lg:p-8">
+        <div className="mx-auto max-w-[1200px] px-4 sm:px-6 lg:px-10 pt-5 lg:pt-9 pb-28 lg:pb-12">
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
+
+      {/* Phone bottom tab bar */}
+      <nav aria-label="Main" className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-surface/95 backdrop-blur border-t border-line pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid" style={{ gridTemplateColumns: `repeat(${tabs.length + (showMore ? 1 : 0)}, minmax(0, 1fr))` }}>
+          {tabs.map((l) => (
+            <li key={l.to}>
+              <NavLink to={l.to} end={l.end}
+                className={({ isActive }) => cn('flex flex-col items-center justify-center gap-0.5 h-16 text-[11px] font-medium',
+                  isActive ? 'text-brand' : 'text-ink-3')}>
+                {({ isActive }) => (<>
+                  <span className={cn('grid place-items-center h-7 w-12 rounded-full transition-colors', isActive && 'bg-brand-soft')}>
+                    <l.icon size={20} aria-hidden />
+                  </span>
+                  <span className="truncate max-w-full px-1">{t(`nav.${l.key}`)}</span>
+                </>)}
+              </NavLink>
+            </li>
+          ))}
+          {showMore && (
+            <li>
+              <button type="button" onClick={() => setMoreOpen(true)} className="w-full flex flex-col items-center justify-center gap-0.5 h-16 text-[11px] font-medium text-ink-3">
+                <span className="grid place-items-center h-7 w-12"><MoreHorizontal size={20} aria-hidden /></span>
+                {t('nav.more')}
+              </button>
+            </li>
+          )}
+        </ul>
+      </nav>
+
+      {showMore && (
+        <Modal open={moreOpen} onOpenChange={setMoreOpen} title={t('nav.menu')} size="sm">
+          <div className="space-y-4">
+            {groups.map((g, i) => (
+              <div key={i} className="space-y-0.5">
+                {g.key && <p className="px-3.5 pb-1 text-xs font-medium text-ink-3">{t(`nav.${g.key}`)}</p>}
+                {g.links.map((l) => <SideLink key={l.to} link={l} t={t} onNavigate={() => setMoreOpen(false)} />)}
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

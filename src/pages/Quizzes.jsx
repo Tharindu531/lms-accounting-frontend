@@ -1,809 +1,210 @@
-import { useState, useEffect, useRef } from 'react';
-import { quizAPI, fileAPI } from '../services/api';
-import {
-  FileQuestion, Clock, CheckCircle, Play, AlertTriangle, Trophy, Sparkles,
-  AlertCircle, PenLine, Paperclip, Eye, Upload, Image, FileText, Lock,
-} from 'lucide-react';
-import FileViewer from '../components/FileViewer';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Clock, Lock, Play, CalendarClock, CheckCircle2, Hourglass, FileQuestion, Timer as TimerIcon, ArrowRight } from 'lucide-react';
+import useAuth from '../context/useAuth';
+import { quizAPI } from '../services/api';
+import { useQuizzes, keys } from '../lib/queries';
+import { loadDraft } from '../lib/quizDraft';
+import { formatDateTime, formatCountdown, useCountdown } from '../lib/time';
+import { errorMessage } from '../lib/errors';
+import { Panel, PageHeader, Badge, Skeleton, EmptyState, ErrorState } from '../components/ui/primitives';
+import { Modal } from '../components/ui/Dialog';
+import Button from '../components/ui/Button';
+import QuizPlayer from '../components/quiz/QuizPlayer';
+import QuizResult from '../components/quiz/QuizResult';
+import ScoreCell from '../components/student/ScoreCell';
 
-const Quizzes = () => {
-  const [quizzes, setQuizzes] = useState([]);
-  const [selectedQuiz, setSelectedQuiz] = useState(null);
-  const [quizData, setQuizData] = useState(null);
-  const [answers, setAnswers] = useState({});
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
-  const [viewingFile, setViewingFile] = useState(null);
-  const [autoSubmitError, setAutoSubmitError] = useState('');
+const Section = ({ title, count, children }) => (
+  <section className="space-y-3">
+    <h2 className="text-[15px] font-semibold text-ink-2">{title} <span className="text-ink-3 tabular font-normal">{count}</span></h2>
+    {children}
+  </section>
+);
 
-  // Timer
-  const [timeLeft, setTimeLeft] = useState(null);
-  const [timedOut, setTimedOut] = useState(false);
-
-  // Post-submission file upload (per writing question)
-  const [quizMarksId, setQuizMarksId] = useState(null);
-  const [answerFiles, setAnswerFiles] = useState({});      // { questionId: [file objects] }
-  const [uploadingFor, setUploadingFor] = useState(null);  // questionId currently uploading
-
-  // Review mode (viewing a past, already-submitted quiz)
-  const [reviewLoading, setReviewLoading] = useState(null); // quizId being loaded
-
-  // Ref to prevent double-submit (race condition between button click and auto-submit)
-  const submittingRef = useRef(false);
-  // Ref to ensure the timeout only ever triggers ONE automatic submit attempt.
-  // Without this, a failed auto-submit (e.g. a transient network/server error)
-  // would re-trigger itself forever: timedOut stays true, submitting goes back
-  // to false in the `finally` block, result stays null, so the effect below
-  // would fire again immediately — looping the failure alert indefinitely and
-  // never letting the student retry manually.
-  const autoSubmitAttemptedRef = useRef(false);
-
-  useEffect(() => {
-    fetchQuizzes();
-  }, []);
-
-  // Countdown tick
-  useEffect(() => {
-    if (timeLeft === null) return;
-    if (timeLeft === 0) { setTimedOut(true); return; }
-    const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
-    return () => clearTimeout(id);
-  }, [timeLeft]);
-
-  // Keep a ref to submitQuiz so the timer effect always calls the latest version.
-  // NOTE: this must run inside an effect, not as a plain statement during render —
-  // submitQuiz is declared later in this component via `const`, so assigning to the
-  // ref synchronously here would throw "Cannot access 'submitQuiz' before
-  // initialization" (temporal dead zone) on every render. An effect runs after the
-  // whole component body has executed, by which point submitQuiz is defined.
-  const submitQuizRef = useRef(null);
-  useEffect(() => {
-    submitQuizRef.current = submitQuiz;
-  });
-
-  // Auto-submit when timer reaches zero — only ever attempted once automatically.
-  useEffect(() => {
-    if (timedOut && !submitting && !result && !autoSubmitAttemptedRef.current) {
-      autoSubmitAttemptedRef.current = true;
-      submitQuizRef.current(true);
-    }
-  }, [timedOut, submitting, result]);
-
-  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-  const fetchQuizzes = async () => {
-    try {
-      const response = await quizAPI.getAll();
-      setQuizzes(response.data.data || []);
-    } catch (err) {
-      setError('Failed to load quizzes');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const startQuiz = async (quizId) => {
-    try {
-      const response = await quizAPI.getForAttempt(quizId);
-      const quiz = response.data.data;
-      setQuizData(quiz);
-      setSelectedQuiz(quizId);
-      setCurrentQuestion(0);
-      setAnswers({});
-      setResult(null);
-      setQuizMarksId(null);
-      setAnswerFiles({});
-      setTimedOut(false);
-      setAutoSubmitError('');
-      autoSubmitAttemptedRef.current = false;
-      setTimeLeft(quiz.timeLimit > 0 ? quiz.timeLimit * 60 : null);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to start quiz');
-    }
-  };
-
-  const handleAnswer = (questionId, answer) => {
-    setAnswers({ ...answers, [questionId]: answer });
-  };
-
-  const submitQuiz = async (isAutoSubmit = false) => {
-    if (submittingRef.current) return; // prevent double submit
-    if (!isAutoSubmit) {
-      const unanswered = (quizData?.questions ?? []).filter(q => !answers[q.id]);
-      if (unanswered.length > 0) {
-        if (!confirm(`You have ${unanswered.length} unanswered question(s). Submit anyway?`)) {
-          return;
-        }
-      }
-    }
-
-    submittingRef.current = true;
-    setTimeLeft(null);
-    setSubmitting(true);
-    try {
-      const response = await quizAPI.submit({ quizId: selectedQuiz, answers });
-      const resultData = response.data.data;
-      setResult(resultData);
-      setQuizMarksId(resultData.quizMarksId);
-      setAutoSubmitError('');
-      fetchQuizzes();
-    } catch (err) {
-      const message = err.response?.data?.message || 'Failed to submit quiz';
-      if (isAutoSubmit) {
-        // Surface this inline instead of alert() — alert() blocks the thread and,
-        // combined with a retry, could otherwise stack up multiple popups.
-        setAutoSubmitError(message);
-      } else {
-        alert(message);
-      }
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-    }
-  };
-
-  // Load a past quiz result for review
-  const reviewQuiz = async (quizId) => {
-    setReviewLoading(quizId);
-    try {
-      const res = await quizAPI.getMyQuizResult(quizId);
-      const resultData = res.data.data;
-      setResult(resultData);
-      setQuizMarksId(resultData.quizMarksId);
-
-      // Fetch uploaded answer files for all writing questions
-      const fileEntries = await Promise.all(
-        (resultData.answerDetails || [])
-          .filter((detail) => detail.questionType === 'WRITING' && resultData.quizMarksId)
-          .map(async (detail) => {
-            try {
-              const fileRes = await fileAPI.getAnswerAttachments(resultData.quizMarksId, detail.questionId);
-              return [detail.questionId, fileRes.data.data || []];
-            } catch {
-              return [detail.questionId, []];
-            }
-          })
-      );
-      const files = Object.fromEntries(fileEntries.filter(([, fileList]) => fileList.length > 0));
-      setAnswerFiles(files);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to load quiz result');
-    } finally {
-      setReviewLoading(null);
-    }
-  };
-
-  // Upload a file for a writing answer (only available on result screen right after submission)
-  const handleAnswerFileUpload = async (questionId, file) => {
-    if (!quizMarksId) return;
-    setUploadingFor(questionId);
-    try {
-      await fileAPI.uploadForAnswer(quizMarksId, questionId, file);
-      // Refresh the file list for this question
-      const res = await fileAPI.getAnswerAttachments(quizMarksId, questionId);
-      setAnswerFiles(prev => ({ ...prev, [questionId]: res.data.data || [] }));
-    } catch (err) {
-      alert(err.response?.data?.message || 'Upload failed. Only images and PDFs up to 20 MB are allowed.');
-    } finally {
-      setUploadingFor(null);
-    }
-  };
-
-  const resetQuiz = () => {
-    setTimeLeft(null);
-    setTimedOut(false);
-    setSelectedQuiz(null);
-    setQuizData(null);
-    setAnswers({});
-    setResult(null);
-    setCurrentQuestion(0);
-    setQuizMarksId(null);
-    setAnswerFiles({});
-  };
-
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const getTimerFraction = () => {
-    if (timeLeft === null || !quizData?.timeLimit) return 1;
-    return timeLeft / (quizData.timeLimit * 60);
-  };
-
-  // ─── Loading / Error ────────────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-center gap-4">
-        <AlertTriangle className="text-amber-600 flex-shrink-0" size={32} />
-        <div>
-          <h2 className="text-lg font-semibold text-amber-800">Access Restricted</h2>
-          <p className="text-amber-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Result / Review Screen ─────────────────────────────────────────────────
-
-  if (result) {
-    const isReview = !quizData; // if quizData is null we came via the Review button
-
-    const getPerformanceDisplay = () => {
-      if (!result.markingComplete) {
-        return {
-          icon: <AlertCircle size={48} />,
-          bg: 'bg-orange-100',
-          iconColor: 'text-orange-600',
-          title: 'Marking in Progress',
-          message: `${result.pendingMarkingCount} writing question(s) pending review`,
-        };
-      }
-      if (result.percentage >= 80) {
-        return {
-          icon: <Sparkles size={48} />,
-          bg: 'bg-green-100',
-          iconColor: 'text-green-600',
-          title: 'Excellent!',
-          message: 'Outstanding performance! Keep up the great work!',
-        };
-      }
-      if (result.percentage >= 50) {
-        return {
-          icon: <Trophy size={48} />,
-          bg: 'bg-yellow-100',
-          iconColor: 'text-yellow-600',
-          title: 'Good Job!',
-          message: 'Good effort! A little more practice will make it perfect.',
-        };
-      }
-      return {
-        icon: <AlertTriangle size={48} />,
-        bg: 'bg-red-100',
-        iconColor: 'text-red-600',
-        title: 'Needs Improvement',
-        message: 'Keep working hard! Review the material and try again.',
-      };
-    };
-
-    const performance = getPerformanceDisplay();
-
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm p-8">
-          {/* Performance header */}
-          <div className="text-center mb-8">
-            <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center ${performance.bg}`}>
-              <span className={performance.iconColor}>{performance.icon}</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800 mb-1">{performance.title}</h1>
-            <p className="text-gray-500 mb-1">{result.quizTitle}</p>
-            <p className="text-sm text-gray-400">{performance.message}</p>
-          </div>
-
-          {/* Score grid */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-indigo-600">
-                {result.markingComplete ? `${result.percentage.toFixed(1)}%` : 'Pending'}
-              </p>
-              <p className="text-gray-500 text-sm">Score</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-indigo-600">{result.obtainedMarks}/{result.totalMarks}</p>
-              <p className="text-gray-500 text-sm">Marks</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-indigo-600">{result.correctAnswers}/{result.totalQuestions}</p>
-              <p className="text-gray-500 text-sm">Correct</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-indigo-600">
-                {Math.floor(result.timeTaken / 60)}:{(result.timeTaken % 60).toString().padStart(2, '0')}
-              </p>
-              <p className="text-gray-500 text-sm">Time Taken</p>
-            </div>
-          </div>
-
-          {/* Upload hint for writing questions (only immediately after submission) */}
-          {!isReview && result.answerDetails?.some(d => d.questionType === 'WRITING') && (
-            <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg flex items-start gap-3">
-              <Upload size={18} className="text-indigo-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-indigo-800">Support your writing answers</p>
-                <p className="text-xs text-indigo-600 mt-0.5">
-                  You can upload images or PDFs for each writing question below. The admin will see them when marking.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Answer Review */}
-          <div className="mb-8">
-            <h3 className="font-semibold text-gray-800 mb-4">Answer Review</h3>
-            <div className="space-y-4">
-              {result.answerDetails?.map((detail, index) => (
-                <AnswerDetailCard
-                  key={detail.questionId}
-                  detail={detail}
-                  index={index}
-                  isReview={isReview}
-                  markingComplete={result.markingComplete}
-                  uploadedFiles={answerFiles[detail.questionId] || []}
-                  uploadingFor={uploadingFor}
-                  onUpload={handleAnswerFileUpload}
-                  onViewFile={setViewingFile}
-                />
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={resetQuiz}
-            className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
-          >
-            Back to Quizzes
-          </button>
-        </div>
-
-        {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
-      </div>
-    );
-  }
-
-  // ─── Active Quiz ────────────────────────────────────────────────────────────
-
-  if (quizData) {
-    const questions = quizData.questions ?? [];
-    const question = questions[currentQuestion] ?? questions[0];
-    const progress = questions.length > 0 ? ((currentQuestion + 1) / questions.length) * 100 : 0;
-
-    if (!question) return null; // no active questions — should not happen after backend fix
-
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {/* Progress bar */}
-          <div className="h-2 bg-gray-200">
-            <div className="h-full bg-indigo-600 transition-all duration-300" style={{ width: `${progress}%` }} />
-          </div>
-
-          {/* Timer bar — shown when quiz has a time limit */}
-          {timeLeft !== null && (() => {
-            const fraction = getTimerFraction();
-            const isLow = fraction <= 0.25;
-            const isMedium = fraction <= 0.5 && fraction > 0.25;
-            const barBg = isLow ? 'bg-red-600' : isMedium ? 'bg-amber-500' : 'bg-green-600';
-            const trackBg = isLow ? 'bg-red-200' : isMedium ? 'bg-amber-200' : 'bg-green-200';
-            return (
-              <div className={`${isLow ? 'bg-red-50' : isMedium ? 'bg-amber-50' : 'bg-green-50'} border-b ${isLow ? 'border-red-200' : isMedium ? 'border-amber-200' : 'border-green-200'}`}>
-                {/* Shrinking progress track */}
-                <div className={`h-1 w-full ${trackBg}`}>
-                  <div
-                    className={`h-full ${barBg} transition-all duration-1000 ${isLow ? 'animate-pulse' : ''}`}
-                    style={{ width: `${fraction * 100}%` }}
-                  />
-                </div>
-                {/* Time display */}
-                <div className="flex items-center justify-center gap-3 py-2">
-                  <Clock size={16} className={isLow ? 'text-red-600' : isMedium ? 'text-amber-600' : 'text-green-600'} />
-                  <span className={`font-mono font-bold text-lg ${isLow ? 'text-red-700 animate-pulse' : isMedium ? 'text-amber-700' : 'text-green-700'}`}>
-                    {formatTime(timeLeft)}
-                  </span>
-                  <span className={`text-xs ${isLow ? 'text-red-500' : isMedium ? 'text-amber-500' : 'text-green-500'}`}>
-                    remaining
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Time's up banner */}
-          {timedOut && !autoSubmitError && (
-            <div className="bg-red-600 px-6 py-3 flex items-center gap-2 text-white">
-              <AlertTriangle size={16} className="flex-shrink-0" />
-              <span className="font-semibold">
-                {submitting ? "Time's up! Submitting your answers..." : "Time's up!"}
-              </span>
-            </div>
-          )}
-
-          {/* Auto-submit failed — let the student retry manually instead of looping */}
-          {timedOut && autoSubmitError && (
-            <div className="bg-red-600 px-6 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-white">
-              <div className="flex items-center gap-2">
-                <AlertTriangle size={16} className="flex-shrink-0" />
-                <span className="font-semibold">Time's up — couldn't submit automatically: {autoSubmitError}</span>
-              </div>
-              <button
-                onClick={() => submitQuiz(true)}
-                disabled={submitting}
-                className="flex-shrink-0 px-4 py-1.5 bg-white text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition disabled:opacity-50"
-              >
-                {submitting ? 'Submitting...' : 'Try Submitting Again'}
-              </button>
-            </div>
-          )}
-
-          <div className="p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">{quizData.title}</h2>
-              <span className="text-gray-500 text-sm">{currentQuestion + 1} / {questions.length}</span>
-            </div>
-
-            {/* Question */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <span className={`px-2 py-0.5 text-xs rounded-full ${
-                  question.questionType === 'WRITING' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {question.questionType === 'WRITING'
-                    ? <span className="flex items-center gap-1"><PenLine size={12} /> Writing</span>
-                    : 'MCQ'}
-                </span>
-                <span className="text-xs text-gray-500">{question.marks} mark(s)</span>
-              </div>
-
-              <p className="text-xl font-medium text-gray-800 mb-4 whitespace-pre-wrap">{question.questionText}</p>
-
-              {/* Question attachments */}
-              {question.attachments?.length > 0 && (
-                <div className="mb-6 space-y-3">
-                  {question.attachments.filter(f => f.fileType === 'IMAGE').map(file => (
-                    <div key={file.id} className="rounded-lg overflow-hidden border border-gray-200">
-                      <img
-                        src={file.url || file.presignedUrl}
-                        alt={file.originalFileName}
-                        className="w-full max-h-96 object-contain bg-gray-50 cursor-pointer hover:opacity-90 transition"
-                        onClick={() => setViewingFile(file)}
-                      />
-                    </div>
-                  ))}
-                  {question.attachments.filter(f => f.fileType !== 'IMAGE').length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {question.attachments.filter(f => f.fileType !== 'IMAGE').map(file => (
-                        <button
-                          key={file.id}
-                          onClick={() => setViewingFile(file)}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border rounded-lg hover:bg-indigo-50 transition text-sm"
-                        >
-                          <Paperclip size={14} className="text-blue-600" />
-                          {file.originalFileName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Answer input */}
-              {question.questionType === 'WRITING' ? (
-                <textarea
-                  value={answers[question.id] || ''}
-                  onChange={(e) => handleAnswer(question.id, e.target.value)}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition resize-none"
-                  rows={6}
-                  placeholder="Type your answer here..."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {['A', 'B', 'C', 'D', 'E'].map((option) => (
-                    question[`option${option}`] && (
-                      <button
-                        key={option}
-                        onClick={() => handleAnswer(question.id, option)}
-                        className={`w-full text-left p-4 rounded-lg border-2 transition whitespace-pre-wrap ${
-                          answers[question.id] === option
-                            ? 'border-indigo-500 bg-indigo-50'
-                            : 'border-gray-200 hover:border-indigo-300'
-                        }`}
-                      >
-                        <span className="font-medium text-indigo-600 mr-3">{option}.</span>
-                        {question[`option${option}`]}
-                      </button>
-                    )
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
-                disabled={currentQuestion === 0}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 disabled:opacity-50"
-              >
-                Previous
-              </button>
-
-              <div className="flex gap-2">
-                {questions.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentQuestion(index)}
-                    className={`w-8 h-8 rounded-full text-sm font-medium ${
-                      index === currentQuestion
-                        ? 'bg-indigo-600 text-white'
-                        : answers[questions[index].id]
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
-
-              {currentQuestion === questions.length - 1 ? (
-                <button
-                  onClick={() => submitQuiz(false)}
-                  disabled={submitting}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-                >
-                  {submitting ? 'Submitting...' : 'Submit Quiz'}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setCurrentQuestion(currentQuestion + 1)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                >
-                  Next
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
-      </div>
-    );
-  }
-
-  // ─── Quiz List ──────────────────────────────────────────────────────────────
-
+const Meta = ({ quiz }) => {
+  const { t } = useTranslation();
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Available Quizzes</h1>
-
-      {quizzes.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <FileQuestion className="mx-auto text-gray-300 mb-4" size={48} />
-          <h2 className="text-xl font-semibold text-gray-600 mb-2">No Quizzes Available</h2>
-          <p className="text-gray-500">Check back later for new quizzes.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {quizzes.map((quiz) => (
-            <div key={quiz.id} className={`bg-white rounded-xl shadow-sm overflow-hidden ${quiz.locked ? 'opacity-70' : ''}`}>
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div className={`p-2 rounded-lg ${quiz.locked ? 'bg-amber-100' : quiz.attempted ? 'bg-green-100' : 'bg-indigo-100'}`}>
-                    {quiz.locked
-                      ? <Lock className="text-amber-600" size={24} />
-                      : quiz.attempted
-                        ? <CheckCircle className="text-green-600" size={24} />
-                        : <FileQuestion className="text-indigo-600" size={24} />}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {quiz.month && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${quiz.locked ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                        {MONTH_NAMES[quiz.month - 1]}
-                      </span>
-                    )}
-                    {quiz.timeLimit > 0 && (
-                      <span className="flex items-center gap-1 text-sm text-gray-500">
-                        <Clock size={16} />{quiz.timeLimit} min
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">{quiz.title}</h3>
-                <p className="text-gray-500 text-sm mb-4">{quiz.description}</p>
-
-                <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                  <span>{quiz.questionCount} questions</span>
-                  <span>{quiz.totalMarks} marks</span>
-                </div>
-
-                {quiz.locked ? (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
-                    <p className="text-amber-700 text-sm font-medium flex items-center justify-center gap-2">
-                      <Lock size={14} />
-                      Requires payment for {MONTH_NAMES[quiz.month - 1]}
-                    </p>
-                  </div>
-                ) : quiz.attempted ? (
-                  <div className="space-y-2">
-                    <div className="bg-green-50 rounded-lg p-3 text-center">
-                      <p className="text-green-700 font-medium">
-                        {quiz.score != null ? `Completed — Score: ${quiz.score.toFixed(1)}%` : 'Completed — Marking Pending'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => reviewQuiz(quiz.id)}
-                      disabled={reviewLoading === quiz.id}
-                      className="w-full flex items-center justify-center gap-2 py-2 border border-indigo-300 text-indigo-600 rounded-lg hover:bg-indigo-50 transition text-sm disabled:opacity-50"
-                    >
-                      {reviewLoading === quiz.id
-                        ? <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600" />
-                        : <Eye size={16} />}
-                      {reviewLoading === quiz.id ? 'Loading...' : 'Review Answers'}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => startQuiz(quiz.id)}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-                  >
-                    <Play size={20} />
-                    Start Quiz
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {viewingFile && <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />}
-    </div>
+    <p className="text-sm text-ink-2 tabular flex flex-wrap gap-x-3 gap-y-1">
+      <span>{t('common.questions', { count: quiz.questionCount })}</span>
+      <span>{t('common.marks', { count: quiz.totalMarks })}</span>
+      {quiz.timeLimit > 0 && <span className="inline-flex items-center gap-1"><Clock size={14} aria-hidden />{t('common.min', { count: quiz.timeLimit })}</span>}
+    </p>
   );
 };
 
-// ─── Answer Detail Card ─────────────────────────────────────────────────────
+const OpenQuiz = ({ quiz, fetchedAt, onStart, starting, hasDraft }) => {
+  const { t } = useTranslation();
+  const left = useCountdown(quiz.closesAt, quiz.serverTime, fetchedAt);
+  const months = t('months', { returnObjects: true });
+  const inProgress = quiz.status === 'IN_PROGRESS' || hasDraft;
+  return (
+    <Panel className="p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+          {quiz.locked ? <Badge tone="due" icon={Lock}>{t('quizzes.lockedBadge', { month: months[(quiz.month ?? 1) - 1] })}</Badge>
+            : inProgress ? <Badge tone="brand" icon={Hourglass}>{t('quizzes.inProgress')}</Badge>
+              : <Badge tone="credit">{t('quizzes.openNow')}</Badge>}
+          {quiz.closesAt && !quiz.locked && <span className="text-sm text-ink-2">{t('home.closesIn', { time: formatCountdown(left) })}</span>}
+        </div>
+        <h3 className="text-lg font-semibold">{quiz.title}</h3>
+        {quiz.description && <p className="text-sm text-ink-2 mt-0.5">{quiz.description}</p>}
+        <div className="mt-2"><Meta quiz={quiz} /></div>
+      </div>
+      {quiz.locked ? (
+        <Link to="/payments" className="inline-flex items-center justify-center h-11 px-4 rounded-control border border-line bg-surface text-sm font-medium hover:bg-sunken">{t('home.howToPay')}</Link>
+      ) : (
+        <Button size="lg" icon={Play} loading={starting} onClick={() => onStart(quiz)} className="justify-center">
+          {inProgress ? t('home.resumeQuiz') : t('home.startQuiz')}
+        </Button>
+      )}
+    </Panel>
+  );
+};
 
-const AnswerDetailCard = ({
-  detail, index, isReview, markingComplete,
-  uploadedFiles, uploadingFor, onUpload, onViewFile,
-}) => {
-  const isPending = detail.markingStatus === 'PENDING';
-  const isWriting = detail.questionType === 'WRITING';
+const UpcomingQuiz = ({ quiz, fetchedAt }) => {
+  const { t } = useTranslation();
+  const left = useCountdown(quiz.opensAt, quiz.serverTime, fetchedAt);
+  return (
+    <li className="flex flex-wrap items-center gap-4 px-5 py-4">
+      <span className="h-10 w-10 rounded-full bg-sunken text-ink-2 grid place-items-center shrink-0"><CalendarClock size={18} aria-hidden /></span>
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">{quiz.title}</p>
+        <p className="text-sm text-ink-2">{t('home.opensOn', { when: formatDateTime(quiz.opensAt) })}</p>
+      </div>
+      <Badge tone="neutral" icon={TimerIcon} className="tabular">{t('home.opensIn', { time: formatCountdown(left) })}</Badge>
+    </li>
+  );
+};
 
-  const cardBg = isPending
-    ? 'bg-orange-50 border-orange-200'
-    : detail.isCorrect
-      ? 'bg-green-50 border-green-200'
-      : 'bg-red-50 border-red-200';
+const Quizzes = () => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const quizzes = useQuizzes();
+  const [params, setParams] = useSearchParams();
+  const [confirming, setConfirming] = useState(null);   // quiz awaiting "Start"
+  const [starting, setStarting] = useState(null);       // quiz id being loaded
+  const [attempt, setAttempt] = useState(null);         // attempt data from the server
+  const [result, setResult] = useState(null);
+
+  const list = useMemo(() => quizzes.data ?? [], [quizzes.data]);
+  const open = list.filter((q) => q.status !== 'UPCOMING' && !q.attempted);
+  const upcoming = list.filter((q) => q.status === 'UPCOMING').sort((a, b) => a.opensAt - b.opensAt);
+  const done = list.filter((q) => q.attempted);
+
+  const begin = async (quiz) => {
+    setConfirming(null);
+    setStarting(quiz.id);
+    try {
+      const res = await quizAPI.getForAttempt(quiz.id);
+      setAttempt(res.data.data);
+    } catch (err) {
+      toast.error(errorMessage(err, t('quizzes.startFailed')));
+      qc.invalidateQueries({ queryKey: keys.quizzes });
+    } finally {
+      setStarting(null);
+    }
+  };
+
+  // Started attempts resume straight away; a new one asks first, because its timer
+  // can't be paused once it starts.
+  const onStart = (quiz) => {
+    const resuming = quiz.status === 'IN_PROGRESS' || (user?.id && loadDraft(user.id, quiz.id));
+    if (resuming || !quiz.timeLimit) begin(quiz);
+    else setConfirming(quiz);
+  };
+
+  // Deep link from Home: /quizzes?start=ID
+  const startId = params.get('start');
+  useEffect(() => {
+    if (!startId || !quizzes.data) return;
+    const q = quizzes.data.find((x) => String(x.id) === startId);
+    setParams({}, { replace: true });
+    if (q && !q.attempted && !q.locked && q.status !== 'UPCOMING') onStart(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startId, quizzes.data]);
+
+  const finish = (res) => {
+    setAttempt(null);
+    setResult(res);
+    window.scrollTo({ top: 0 });
+    qc.invalidateQueries({ queryKey: keys.quizzes });
+    qc.invalidateQueries({ queryKey: keys.myResults });
+    toast.success(t('quizzes.submitted'));
+  };
+
+  if (attempt) {
+    return <QuizPlayer quiz={attempt} user={user} onSubmitted={finish}
+      onExit={() => { setAttempt(null); qc.invalidateQueries({ queryKey: keys.quizzes }); }} />;
+  }
+
+  if (result) {
+    return <QuizResult result={result} fresh onBack={() => setResult(null)} backLabel={t('quizzes.backToQuizzes')} />;
+  }
 
   return (
-    <div className={`p-4 rounded-xl border-2 ${cardBg}`}>
-      {/* Question header */}
-      <div className="flex items-start justify-between mb-3">
-        <p className="font-medium text-gray-800 pr-4 whitespace-pre-wrap">
-          {index + 1}. {detail.questionText}
-        </p>
-        <span className={`flex-shrink-0 px-2 py-0.5 text-xs rounded-full ${
-          isWriting ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-        }`}>
-          {isWriting ? 'Writing' : 'MCQ'}
-        </span>
-      </div>
+    <div className="space-y-8">
+      <PageHeader title={t('nav.quizzes')} description={t('quizzes.lead')} />
 
-      {/* MCQ result */}
-      {!isWriting && (
-        <div className="space-y-1">
-          <p className={detail.isCorrect ? 'text-green-700' : 'text-red-700'}>
-            Your answer: <strong>{detail.selectedAnswer || 'Not answered'}</strong>
-            {!detail.isCorrect && detail.correctAnswer && (
-              <span className="ml-2 text-gray-600">
-                (Correct: <strong>{detail.correctAnswer}</strong>)
-              </span>
-            )}
-          </p>
-          <p className="text-sm text-gray-500">
-            {detail.isCorrect ? `+${detail.maxMarks} mark(s)` : '0 marks'}
-          </p>
-        </div>
-      )}
-
-      {/* Writing result */}
-      {isWriting && (
-        <div className="space-y-3">
-          {/* Student's typed answer */}
-          <div className="bg-white p-3 rounded-lg border border-gray-200">
-            <p className="text-xs text-gray-500 font-medium mb-1">Your Answer:</p>
-            <p className="text-gray-800 whitespace-pre-wrap text-sm">
-              {detail.selectedAnswer || <span className="italic text-gray-400">No answer provided</span>}
-            </p>
-          </div>
-
-          {/* Uploaded files */}
-          {uploadedFiles.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-500 font-medium mb-2 flex items-center gap-1">
-                <Paperclip size={12} /> Uploaded Files:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {uploadedFiles.map(file => (
-                  <button
-                    key={file.id}
-                    onClick={() => onViewFile(file)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-indigo-50 hover:border-indigo-300 transition text-sm"
-                  >
-                    {file.fileType === 'IMAGE'
-                      ? <Image size={14} className="text-green-600" />
-                      : <FileText size={14} className="text-blue-600" />}
-                    <span className="max-w-[160px] truncate">{file.originalFileName}</span>
-                  </button>
+      {quizzes.isPending ? (
+        <div className="space-y-3"><Skeleton className="h-32" /><Skeleton className="h-32" /></div>
+      ) : quizzes.isError ? (
+        <Panel><ErrorState title={t('common.loadFailed')} description={errorMessage(quizzes.error)} onRetry={quizzes.refetch} retryLabel={t('common.retry')} /></Panel>
+      ) : list.length === 0 ? (
+        <Panel><EmptyState icon={FileQuestion} title={t('home.noQuizTitle')} description={t('home.noQuizHint')} /></Panel>
+      ) : (
+        <>
+          {open.length > 0 && (
+            <Section title={t('quizzes.available')} count={open.length}>
+              <div className="space-y-3">
+                {open.map((q) => <OpenQuiz key={q.id} quiz={q} fetchedAt={quizzes.dataUpdatedAt} onStart={onStart} starting={starting === q.id}
+                  hasDraft={!!(user?.id && loadDraft(user.id, q.id))} />)}
+              </div>
+            </Section>
+          )}
+          {upcoming.length > 0 && (
+            <Section title={t('quizzes.upcoming')} count={upcoming.length}>
+              <Panel as="ul" className="divide-y divide-line">
+                {upcoming.map((q) => <UpcomingQuiz key={q.id} quiz={q} fetchedAt={quizzes.dataUpdatedAt} />)}
+              </Panel>
+            </Section>
+          )}
+          {done.length > 0 && (
+            <Section title={t('quizzes.done')} count={done.length}>
+              <Panel as="ul" className="divide-y divide-line">
+                {done.map((q) => (
+                  <li key={q.id}>
+                    <Link to={`/results?quiz=${q.id}`} className="flex items-center gap-4 px-5 py-4 hover:bg-sunken/60">
+                      <CheckCircle2 size={20} className="text-credit shrink-0" aria-hidden />
+                      <span className="min-w-0 flex-1 font-medium truncate">{q.title}</span>
+                      <ScoreCell result={{ markingComplete: q.score != null, percentage: q.score, obtainedMarks: null, totalMarks: q.totalMarks }} />
+                      <ArrowRight size={16} className="text-ink-3" aria-hidden />
+                    </Link>
+                  </li>
                 ))}
-              </div>
-            </div>
+              </Panel>
+            </Section>
           )}
-
-          {/* Upload button — only shown right after submission, not in review mode */}
-          {!isReview && (
-            <label className={`flex items-center gap-2 px-4 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition ${
-              uploadingFor === detail.questionId
-                ? 'border-indigo-400 bg-indigo-50 opacity-70'
-                : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50'
-            }`}>
-              <Upload size={16} className="text-gray-400 flex-shrink-0" />
-              <span className="text-sm text-gray-500">
-                {uploadingFor === detail.questionId ? 'Uploading...' : 'Upload image or PDF'}
-              </span>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="hidden"
-                disabled={uploadingFor === detail.questionId}
-                onChange={(e) => {
-                  if (e.target.files?.[0]) onUpload(detail.questionId, e.target.files[0]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          )}
-
-          {/* Admin marks & feedback */}
-          {detail.markingStatus === 'MARKED' && (
-            <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-lg">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">Admin Review</p>
-                <span className="text-sm font-bold text-indigo-800">
-                  {detail.adminMarks ?? 0} / {detail.maxMarks} marks
-                </span>
-              </div>
-              {detail.adminComment ? (
-                <p className="text-sm text-indigo-800 italic">"{detail.adminComment}"</p>
-              ) : (
-                <p className="text-xs text-indigo-500">No comment left.</p>
-              )}
-            </div>
-          )}
-
-          {/* Pending notice */}
-          {isPending && (
-            <div className="flex items-center gap-2 text-orange-600 text-sm">
-              <AlertCircle size={14} />
-              Awaiting admin marking
-            </div>
-          )}
-
-          {/* Reference answer — shown when quiz is fully marked */}
-          {markingComplete && detail.correctAnswer && (
-            <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
-              <p className="text-xs text-gray-500 font-medium mb-1">Reference Answer:</p>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.correctAnswer}</p>
-            </div>
-          )}
-        </div>
+        </>
       )}
+
+      <Modal open={!!confirming} onOpenChange={(o) => !o && setConfirming(null)} size="sm" title={confirming?.title ?? ''}
+        description={t('quizzes.beforeYouStart')}
+        footer={<>
+          <Button variant="secondary" onClick={() => setConfirming(null)}>{t('common.cancel')}</Button>
+          <Button icon={Play} onClick={() => begin(confirming)}>{t('quizzes.startNow')}</Button>
+        </>}>
+        {confirming && (
+          <ul className="space-y-2.5 text-sm">
+            <li className="flex gap-2.5"><Clock size={18} className="text-brand shrink-0" aria-hidden />{t('quizzes.ruleTimer', { count: confirming.timeLimit })}</li>
+            <li className="flex gap-2.5"><CheckCircle2 size={18} className="text-brand shrink-0" aria-hidden />{t('quizzes.ruleSaved')}</li>
+            <li className="flex gap-2.5"><Hourglass size={18} className="text-brand shrink-0" aria-hidden />{t('quizzes.ruleAutoSubmit')}</li>
+          </ul>
+        )}
+      </Modal>
     </div>
   );
 };

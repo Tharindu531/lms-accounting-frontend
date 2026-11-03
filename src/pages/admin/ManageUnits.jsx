@@ -1,218 +1,118 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { FolderOpen, Plus, Pencil, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { unitAPI } from '../../services/api';
-import { FolderOpen, Plus, Edit2, Trash2, X, Save } from 'lucide-react';
+import { unwrap } from '../../lib/queryClient';
+import { errorMessage } from '../../lib/errors';
+import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, Input, Textarea, Table, Th, Td } from '../../components/ui/primitives';
+import { Modal } from '../../components/ui/Dialog';
+import { useConfirm } from '../../components/ui/Confirm';
+import Button from '../../components/ui/Button';
 
 const ManageUnits = () => {
-  const [units, setUnits] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editingUnit, setEditingUnit] = useState(null);
+  const qc = useQueryClient();
+  const confirm = useConfirm();
+  const units = useQuery({ queryKey: ['admin', 'units'], queryFn: () => unitAPI.getAll().then(unwrap) });
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: '', description: '' });
+  const list = [...(units.data ?? [])].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.id - b.id);
 
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    displayOrder: 0
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['admin', 'units'] });
+    qc.invalidateQueries({ queryKey: ['units'] });
+  };
+
+  const save = useMutation({
+    mutationFn: (data) => (editing?.id ? unitAPI.update(editing.id, data) : unitAPI.create(data)),
+    onSuccess: () => { toast.success(editing?.id ? 'Unit updated' : 'Unit added'); setEditing(null); refresh(); },
+    onError: (e) => toast.error(errorMessage(e, 'The unit wasn\'t saved.')),
   });
 
-  useEffect(() => {
-    fetchUnits();
-  }, []);
+  // Swap with the neighbour, then renumber everything 1..n so gaps and ties disappear.
+  const move = useMutation({
+    mutationFn: async ({ index, dir }) => {
+      const order = [...list];
+      const j = index + dir;
+      [order[index], order[j]] = [order[j], order[index]];
+      await Promise.all(order.map((u, i) => (u.displayOrder === i + 1 ? null
+        : unitAPI.update(u.id, { name: u.name, description: u.description ?? '', displayOrder: i + 1 }))).filter(Boolean));
+    },
+    onSuccess: refresh,
+    onError: (e) => { toast.error(errorMessage(e, 'The order wasn\'t saved.')); refresh(); },
+  });
 
-  const fetchUnits = async () => {
-    try {
-      const response = await unitAPI.getAll();
-      setUnits(response.data.data || []);
-    } catch (err) {
-      console.error('Failed to load units:', err);
-    } finally {
-      setLoading(false);
-    }
+  const remove = async (u) => {
+    const ok = await confirm({
+      title: `Delete "${u.name}"?`,
+      description: u.lessonCount || u.questionCount
+        ? `It's removed from the unit lists. Its ${u.lessonCount} lesson(s) and ${u.questionCount} bank question(s) are kept.`
+        : 'It\'s removed from the unit lists.',
+      confirmLabel: 'Delete unit', tone: 'danger',
+    });
+    if (!ok) return;
+    try { await unitAPI.delete(u.id); toast.success('Unit deleted'); refresh(); }
+    catch (e) { toast.error(errorMessage(e, 'The unit wasn\'t deleted.')); }
   };
 
-  const openModal = (unit = null) => {
-    if (unit) {
-      setEditingUnit(unit);
-      setForm({
-        name: unit.name,
-        description: unit.description || '',
-        displayOrder: unit.displayOrder || 0
-      });
-    } else {
-      setEditingUnit(null);
-      setForm({
-        name: '',
-        description: '',
-        displayOrder: units.length
-      });
-    }
-    setShowModal(true);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    try {
-      if (editingUnit) {
-        await unitAPI.update(editingUnit.id, form);
-      } else {
-        await unitAPI.create(form);
-      }
-      fetchUnits();
-      setShowModal(false);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save unit');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this unit?')) return;
-
-    try {
-      await unitAPI.delete(id);
-      fetchUnits();
-    } catch (err) {
-      console.error('Failed to delete unit:', err);
-      alert('Failed to delete unit');
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  const open = (u) => { setEditing(u ?? {}); setForm({ name: u?.name ?? '', description: u?.description ?? '' }); };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Manage Units</h1>
-        <button
-          onClick={() => openModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-        >
-          <Plus size={20} />
-          Add Unit
-        </button>
-      </div>
-
-      {units.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-          <FolderOpen className="mx-auto text-gray-300 mb-4" size={48} />
-          <h2 className="text-xl font-semibold text-gray-600 mb-2">No Units</h2>
-          <p className="text-gray-500">Create your first unit to organize lessons and questions.</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto custom-scrollbar"><table className="w-full min-w-[640px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {units.map((unit) => (
-                <tr key={unit.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{unit.displayOrder}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center min-w-0 max-w-xs">
-                      <FolderOpen className="text-indigo-500 mr-2 flex-shrink-0" size={20} />
-                      <span className="font-medium text-gray-900 truncate">{unit.name}</span>
+      <PageHeader title="Units" description="Units group lessons and bank questions. Students see them in this order."
+        actions={<Button icon={Plus} onClick={() => open(null)}>New unit</Button>} />
+      <Panel>
+        {units.isPending ? <SkeletonRows rows={4} /> : units.isError ? (
+          <ErrorState description={errorMessage(units.error)} onRetry={units.refetch} />
+        ) : list.length === 0 ? (
+          <EmptyState icon={FolderOpen} title="No units yet" description="Add your first unit to start organising lessons."
+            action={<Button icon={Plus} onClick={() => open(null)}>New unit</Button>} />
+        ) : (
+          <Table minWidth={640}>
+            <thead><tr><Th className="w-24">Order</Th><Th>Unit</Th><Th className="text-right">Lessons</Th><Th className="text-right">Questions</Th><Th>Status</Th><Th className="w-24" /></tr></thead>
+            <tbody>
+              {list.map((u, i) => (
+                <tr key={u.id} className="hover:bg-sunken/50">
+                  <Td>
+                    <div className="flex items-center gap-0.5">
+                      <span className="w-6 tabular text-ink-3">{i + 1}</span>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Move ${u.name} up`} disabled={i === 0 || move.isPending} onClick={() => move.mutate({ index: i, dir: -1 })}><ArrowUp size={15} /></Button>
+                      <Button variant="ghost" size="icon-sm" aria-label={`Move ${u.name} down`} disabled={i === list.length - 1 || move.isPending} onClick={() => move.mutate({ index: i, dir: 1 })}><ArrowDown size={15} /></Button>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{unit.description}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${unit.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {unit.isActive !== false ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={() => openModal(unit)}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg mr-2"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(unit.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+                  </Td>
+                  <Td>
+                    <p className="font-medium">{u.name}</p>
+                    {u.description && <p className="text-sm text-ink-2 truncate max-w-md">{u.description}</p>}
+                  </Td>
+                  <Td className="text-right tabular">{u.lessonCount ?? 0}</Td>
+                  <Td className="text-right tabular">{u.questionCount ?? 0}</Td>
+                  <Td>{u.isActive !== false ? <Badge tone="credit">Active</Badge> : <Badge>Hidden</Badge>}</Td>
+                  <Td>
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon-sm" aria-label={`Edit ${u.name}`} onClick={() => open(u)}><Pencil size={16} /></Button>
+                      <Button variant="danger-ghost" size="icon-sm" aria-label={`Delete ${u.name}`} onClick={() => remove(u)}><Trash2 size={16} /></Button>
+                    </div>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table></div>
-        </div>
-      )}
+          </Table>
+        )}
+      </Panel>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white rounded-t-2xl">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {editingUnit ? 'Edit Unit' : 'Add New Unit'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  placeholder="e.g., Unit 1 - Introduction"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  rows={3}
-                  placeholder="Brief description of this unit"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Display Order</label>
-                <input
-                  type="number"
-                  value={form.displayOrder}
-                  onChange={(e) => setForm({ ...form, displayOrder: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                  min={0}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600">
-                  Cancel
-                </button>
-                <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-                  <Save size={18} />
-                  {editingUnit ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)} title={editing?.id ? 'Edit unit' : 'New unit'}
+        footer={<>
+          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+          <Button type="submit" form="unit-form" loading={save.isPending}>{editing?.id ? 'Save unit' : 'Add unit'}</Button>
+        </>}>
+        <form id="unit-form" className="space-y-4" onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate({ ...form, displayOrder: editing?.id ? editing.displayOrder : list.length + 1 });
+        }}>
+          <Field label="Name" required hint="Sinhala, English or both, e.g. ගිණුම්කරණ සංකල්ප">{(p) => <Input {...p} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />}</Field>
+          <Field label="Description">{(p) => <Textarea {...p} rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />}</Field>
+        </form>
+      </Modal>
     </div>
   );
 };
