@@ -42,7 +42,7 @@ const AnswerMarker = ({ answer, quizMarksId, value, onChange, snippets, onAddSni
   return (
     <section className="py-5 border-b border-line last:border-b-0" aria-labelledby={`q-${answer.questionId}`}>
       <div className="flex items-start justify-between gap-3">
-        <h3 id={`q-${answer.questionId}`} className="font-medium leading-relaxed"><span className="text-ink-3 tabular mr-1.5">{index + 1}.</span>{answer.questionText}</h3>
+        <h3 id={`q-${answer.questionId}`} className="text-[15px] font-medium leading-[1.65] whitespace-pre-wrap max-w-[75ch]"><span className="font-semibold text-ink-3 tabular mr-1.5">{index + 1}.</span>{answer.questionText}</h3>
         {marked ? <Badge tone="credit" icon={CheckCircle2}>{answer.adminMarks}/{max}</Badge> : <Badge tone="due">{max} marks</Badge>}
       </div>
       {answer.expectedAnswer && (

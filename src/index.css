@@ -1,6 +1,19 @@
 @import "tailwindcss";
 @import "@fontsource-variable/ibm-plex-sans/wght.css";
-@import "@fontsource-variable/noto-sans-sinhala/wght.css";
+/* Sinhala: our own face instead of the package CSS, so we can scale it. Noto Sans
+   Sinhala draws its letters about 20% bigger than Plex's x-height at the same
+   font-size, which made Sinhala questions look a size larger than the English
+   ones beside them. size-adjust brings the two scripts to the same visual size.
+   Only the Sinhala subset is needed: Plex comes first in the stack and covers Latin. */
+@font-face {
+  font-family: "Noto Sans Sinhala Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("@fontsource-variable/noto-sans-sinhala/files/noto-sans-sinhala-sinhala-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0964-0965, U+0D81-0DF4, U+1CF2, U+200C-200D, U+25CC, U+111E1-111F4;
+  size-adjust: 88%;
+}
 
 /* Dark mode follows a class on <html> (set by ThemeProvider, and before first paint
    by the inline script in index.html) so the user's choice wins over the OS. */
@@ -126,6 +139,14 @@
 
   ::selection { background: var(--brand-soft); color: var(--ink); }
 
+  /* Native dropdown lists take their colours from the <option>s. Without these,
+     Chrome on Windows painted dark-theme options as light text on a white list. */
+  select option, select optgroup {
+    background-color: var(--surface);
+    color: var(--ink);
+  }
+  select option:disabled { color: var(--ink-3); }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
@@ -168,4 +189,13 @@
   body * { visibility: hidden !important; }
   .print-area, .print-area * { visibility: visible !important; }
   .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 24px; color: #000; background: #fff; }
+}
+
+/* Select chevron. Kept out of Tailwind's bg-[...] utilities: tailwind-merge read
+   those as background conflicts and dropped bg-surface, leaving selects transparent. */
+.select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c869c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 16px;
 }

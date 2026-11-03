@@ -91,7 +91,7 @@ const AnswerRow = ({ detail, index, quizMarksId, canUpload, onView }) => {
         <Icon size={20} className={cn('shrink-0 mt-0.5', iconTone)} aria-label={t(`result.state.${state}`)} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
-            <p className="font-medium whitespace-pre-wrap"><span className="text-ink-3 tabular mr-1.5">{index + 1}.</span>{detail.questionText}</p>
+            <p className="text-[15px] leading-[1.65] whitespace-pre-wrap max-w-[75ch]"><span className="font-semibold text-ink-3 tabular mr-1.5">{index + 1}.</span>{detail.questionText}</p>
             <span className="text-sm tabular text-ink-2 whitespace-nowrap">
               {earned != null && !pending ? `${earned}/${detail.maxMarks}` : t('common.marks', { count: detail.maxMarks })}
             </span>

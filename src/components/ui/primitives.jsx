@@ -24,8 +24,8 @@ export const PanelHeader = ({ title, description, actions, className }) => (
 export const PageHeader = ({ title, description, actions, className }) => (
   <header className={cn('flex flex-wrap items-end justify-between gap-4 mb-6', className)}>
     <div className="min-w-0">
-      <h1 className="text-[26px] font-semibold text-ink">{title}</h1>
-      {description && <p className="text-ink-2 mt-1 max-w-2xl">{description}</p>}
+      <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+      {description && <p className="text-[15px] text-ink-2 mt-1 max-w-2xl">{description}</p>}
     </div>
     {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
   </header>
@@ -158,9 +158,7 @@ export const Textarea = forwardRef(function Textarea({ className, ...props }, re
 
 export const Select = forwardRef(function Select({ className, children, ...props }, ref) {
   return (
-    <select ref={ref} className={cn(control, 'h-10 pr-8 appearance-none bg-no-repeat bg-[right_0.6rem_center] bg-[length:16px]', className)}
-      style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c869c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }}
-      {...props}>
+    <select ref={ref} className={cn(control, 'select-chevron h-10 pr-9 appearance-none cursor-pointer', className)} {...props}>
       {children}
     </select>
   );

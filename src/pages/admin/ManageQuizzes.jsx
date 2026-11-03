@@ -109,7 +109,7 @@ const validDetails = (form) => {
 /* ---------- Builder for one quiz ---------- */
 
 const QuestionCard = ({ q, index, count, locked, onEdit, onRemove, onMove, dragProps }) => (
-  <li {...dragProps} className="group flex gap-3 px-4 py-4 bg-surface">
+  <li {...dragProps} className="group flex gap-3 px-4 py-3.5 bg-surface">
     <div className="flex flex-col items-center gap-0.5 pt-0.5">
       <GripVertical size={16} className="text-ink-3 cursor-grab hidden sm:block" aria-hidden />
       <Button variant="ghost" size="icon-sm" aria-label={`Move question ${index + 1} up`} disabled={index === 0} onClick={() => onMove(index, -1)}><ArrowUp size={14} /></Button>
@@ -117,7 +117,7 @@ const QuestionCard = ({ q, index, count, locked, onEdit, onRemove, onMove, dragP
     </div>
     <div className="min-w-0 flex-1">
       <div className="flex items-start justify-between gap-3">
-        <p className="font-medium whitespace-pre-wrap"><span className="text-ink-3 tabular mr-1.5">{index + 1}.</span>{q.questionText}</p>
+        <p className="text-[15px] leading-[1.65] whitespace-pre-wrap max-w-[75ch]"><span className="font-semibold text-ink-3 tabular mr-1.5">{index + 1}.</span>{q.questionText}</p>
         <div className="flex items-center gap-1 shrink-0">
           <Badge>{q.marks} mark{q.marks === 1 ? '' : 's'}</Badge>
           {!locked && <>
@@ -132,18 +132,28 @@ const QuestionCard = ({ q, index, count, locked, onEdit, onRemove, onMove, dragP
         {q.attachments?.length > 0 && <span className="inline-flex items-center gap-1"><Paperclip size={12} aria-hidden />{q.attachments.length} file{q.attachments.length === 1 ? '' : 's'}</span>}
       </p>
       {q.questionType !== 'WRITING' && (
-        <ol className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          {['A', 'B', 'C', 'D', 'E'].filter((l) => q[`option${l}`]).map((l) => (
-            <li key={l} className={cn('flex gap-2', q.correctAnswer === l ? 'text-credit font-medium' : 'text-ink-2')}>
-              <span className="w-4 shrink-0">{l}.</span><span>{q[`option${l}`]}</span>
-              {q.correctAnswer === l && <CheckCircle2 size={14} className="mt-0.5 shrink-0" aria-label="correct answer" />}
-            </li>
-          ))}
-        </ol>
+        <OptionList q={q} />
       )}
     </div>
   </li>
 );
+
+/* Options read top-to-bottom, A to E, like the paper. Short options use two columns
+   filled down (A B C | D E) instead of across, which read A, C, E down the left. */
+const OptionList = ({ q }) => {
+  const letters = ['A', 'B', 'C', 'D', 'E'].filter((l) => q[`option${l}`]);
+  const short = letters.every((l) => q[`option${l}`].length <= 38);
+  return (
+    <ol className={cn('mt-2 max-w-2xl gap-x-8 gap-y-0.5 text-[13.5px] leading-normal', short ? 'grid sm:grid-flow-col sm:grid-rows-3 sm:auto-cols-fr' : 'space-y-0.5')}>
+      {letters.map((l) => (
+        <li key={l} className={cn('flex gap-2', q.correctAnswer === l ? 'text-credit font-medium' : 'text-ink-2')}>
+          <span className="w-4 shrink-0 tabular">{l}.</span><span>{q[`option${l}`]}</span>
+          {q.correctAnswer === l && <CheckCircle2 size={14} className="mt-0.5 shrink-0" aria-label="correct answer" />}
+        </li>
+      ))}
+    </ol>
+  );
+};
 
 const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetails }) => {
   const confirm = useConfirm();
@@ -200,7 +210,7 @@ const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetail
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1"><Badge tone={state.tone}>{state.label}</Badge>{quiz.month && <Badge tone="brand">{periodLabel(quiz.month, quiz.year)} fee</Badge>}</div>
-          <h1 className="text-[26px] font-semibold">{quiz.title}</h1>
+          <h1 className="text-2xl font-semibold">{quiz.title}</h1>
           <p className="text-sm text-ink-2 mt-1 tabular">
             {windowText(quiz)} · {quiz.timeLimit ? `${quiz.timeLimit} min` : 'no time limit'} · batches {Array.from(quiz.accessibleBatches ?? []).sort().join(', ')}
           </p>

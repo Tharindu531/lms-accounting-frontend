@@ -329,7 +329,7 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
                   </Button>
                 </div>
 
-                <h2 id="q-text" className="text-xl sm:text-[22px] leading-[1.55] font-medium whitespace-pre-wrap">{question.questionText}</h2>
+                <h2 id="q-text" className="text-[17px] sm:text-lg leading-[1.7] font-medium tracking-normal whitespace-pre-wrap max-w-[68ch]">{question.questionText}</h2>
 
                 {question.attachments?.length > 0 && (
                   <div className="mt-5 space-y-3">
@@ -347,7 +347,7 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
                   </div>
                 )}
 
-                <div className="mt-7">
+                <div className="mt-6">
                   {isWriting ? (
                     <>
                       <label htmlFor={`a-${question.id}`} className="sr-only">{t('quiz.yourAnswerLabel')}</label>
@@ -364,11 +364,11 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
                         return (
                           <button key={o} type="button" role="radio" aria-checked={selected} disabled={timedOut}
                             onClick={() => answer(question.id, o)}
-                            className={cn('w-full flex items-start gap-3.5 text-left min-h-14 p-3.5 rounded-panel border transition-colors',
+                            className={cn('w-full flex items-start gap-3 text-left min-h-12 px-3.5 py-3 rounded-panel border transition-colors',
                               selected ? 'border-brand bg-brand-soft ring-1 ring-brand' : 'border-line bg-surface hover:border-line-strong')}>
-                            <span className={cn('h-8 w-8 shrink-0 rounded-[8px] grid place-items-center text-sm font-semibold',
+                            <span className={cn('h-7 w-7 shrink-0 rounded-[7px] grid place-items-center text-[13px] font-semibold',
                               selected ? 'bg-brand text-on-brand' : 'bg-sunken text-ink-2')}>{o}</span>
-                            <span className="pt-1 whitespace-pre-wrap leading-relaxed">{question[`option${o}`]}</span>
+                            <span className="pt-0.5 text-[15px] whitespace-pre-wrap leading-relaxed">{question[`option${o}`]}</span>
                           </button>
                         );
                       })}
