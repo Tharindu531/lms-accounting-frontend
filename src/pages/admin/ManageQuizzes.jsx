@@ -8,7 +8,6 @@ import {
 import { quizAPI, unitAPI } from '../../services/api';
 import { unwrap } from '../../lib/queryClient';
 import { errorMessage } from '../../lib/errors';
-import { periodLabel } from '../../lib/period';
 import { audienceFrom, audiencePayload, audienceProblem, audienceSummary, emptyAudience } from '../../lib/audience';
 import { useBatchList } from '../../lib/useBatchList';
 import { emptyDraw, drawPayload } from '../../lib/draw';
@@ -17,7 +16,6 @@ import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, 
 import { Modal } from '../../components/ui/Dialog';
 import { useConfirm } from '../../components/ui/Confirm';
 import Button from '../../components/ui/Button';
-import { PeriodPicker } from '../../components/admin/AccessFields';
 import AudienceEditor from '../../components/admin/AudienceEditor';
 import BankPicker from '../../components/admin/BankPicker';
 import RandomDrawDialog, { DrawSettings } from '../../components/admin/RandomDrawDialog';
@@ -32,20 +30,19 @@ const QUIZ_WORDS = { from: 'From', until: 'Until', none: 'No time window', alway
 const summary = (q) => audienceSummary(q, Date.now(), QUIZ_WORDS);
 
 /** "Batches 2026, 2027" or each batch with its own window when they differ. */
-const WindowLine = ({ sum, className }) => (sum.same || !sum.rows.length ? (
+const WindowLine = ({ sum, className }) => ((sum.same && sum.sameFee) || !sum.rows.length ? (
   <p className={className}>{sum.text}</p>
 ) : (
   <ul className={className}>
-    {sum.rows.map((r) => <li key={r.batchId}><span className="font-medium text-ink-2">{r.batchName}:</span> {r.text}</li>)}
+    {sum.rows.map((r) => <li key={r.batchId}><span className="font-medium text-ink-2">{r.batchName}:</span> {r.text}{!sum.sameFee && r.fee ? ` · ${r.fee}` : ''}</li>)}
   </ul>
 ));
 
 /* ---------- Quiz details form ---------- */
 
-const emptyDetails = { title: '', description: '', audience: emptyAudience, timeLimit: '30', month: '', year: '' };
+const emptyDetails = { title: '', description: '', audience: emptyAudience, timeLimit: '30' };
 const detailsFrom = (q) => (q ? {
   title: q.title ?? '', description: q.description ?? '', audience: audienceFrom(q), timeLimit: String(q.timeLimit ?? 0),
-  month: q.month ? String(q.month) : '', year: q.year ? String(q.year) : '',
 } : emptyDetails);
 
 const DetailsForm = ({ form, setForm, fromUnits, units }) => {
@@ -67,15 +64,10 @@ const DetailsForm = ({ form, setForm, fromUnits, units }) => {
         <AudienceEditor kind="quiz" value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
       </div>
 
-      <div className="grid gap-4 pt-5 border-t border-line sm:grid-cols-2">
+      <div className="pt-5 border-t border-line">
         <Field label="Time limit (minutes)" hint="0 for no limit. The clock starts when a student opens the quiz.">
           {(p) => <Input {...p} type="number" min="0" max="600" value={form.timeLimit} onChange={set('timeLimit')} className="w-32" />}
         </Field>
-        {!fromUnits && (
-          <Field label="Unlocks with the fee for">
-            {(p) => <PeriodPicker id={p.id} month={form.month} year={form.year} onChange={({ month, year }) => setForm((f) => ({ ...f, month, year }))} />}
-          </Field>
-        )}
       </div>
     </div>
   );
@@ -84,7 +76,6 @@ const DetailsForm = ({ form, setForm, fromUnits, units }) => {
 const detailsPayload = (form) => ({
   title: form.title.trim(), description: form.description, audience: audiencePayload(form.audience),
   timeLimit: Number(form.timeLimit) || 0,
-  month: form.month ? Number(form.month) : null, year: form.month ? Number(form.year || new Date().getFullYear()) : null,
 });
 
 const validDetails = (form, names) => {
@@ -199,7 +190,7 @@ const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetail
       <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm text-ink-2 hover:text-ink"><ChevronLeft size={16} aria-hidden /> All quizzes</button>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1"><Badge tone={state.tone}>{state.label}</Badge>{quiz.month && <Badge tone="brand">{periodLabel(quiz.month, quiz.year)} fee</Badge>}</div>
+          <div className="flex items-center gap-2 mb-1"><Badge tone={state.tone}>{state.label}</Badge>{state.fee && <Badge tone="brand">{state.fee}</Badge>}</div>
           <h1 className="text-2xl font-semibold">{quiz.title}</h1>
           <p className="text-sm text-ink-2 mt-1">
             {quiz.timeLimit ? `${quiz.timeLimit} min` : 'No time limit'}{state.same && state.batches?.length ? ` · ${state.rows.map((r) => r.batchName).join(', ')}: ${state.text}` : ''}
@@ -360,7 +351,7 @@ const ManageQuizzes = () => {
                     <tr key={q.id} className="hover:bg-sunken/50 cursor-pointer" onClick={() => setOpenId(q.id)}>
                       <Td>
                         <p className="font-medium">{q.title}</p>
-                        <p className="text-xs text-ink-3 mt-0.5">{st.rows.length ? st.rows.map((r) => r.batchName).join(', ') : 'No batches'}{q.month ? ` · ${periodLabel(q.month, q.year)} fee` : ''}{q.timeLimit ? ` · ${q.timeLimit} min` : ''}</p>
+                        <p className="text-xs text-ink-3 mt-0.5">{st.rows.length ? st.rows.map((r) => r.batchName).join(', ') : 'No batches'}{st.fee ? ` · ${st.fee}` : ''}{q.timeLimit ? ` · ${q.timeLimit} min` : ''}</p>
                       </Td>
                       <Td><Badge tone={st.tone}>{st.label}</Badge><WindowLine sum={st} className="text-xs text-ink-3 mt-1 space-y-0.5" /></Td>
                       <Td className="text-right tabular">{q.questionCount}<span className="text-ink-3"> · {q.totalMarks} marks</span></Td>

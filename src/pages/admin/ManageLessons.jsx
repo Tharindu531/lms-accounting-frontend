@@ -6,13 +6,11 @@ import { lessonAPI, unitAPI, fileAPI } from '../../services/api';
 import { unwrap } from '../../lib/queryClient';
 import { errorMessage } from '../../lib/errors';
 import { youTubeId } from '../../lib/queries';
-import { periodLabel } from '../../lib/period';
 import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, Input, Textarea, Table, Th, Td } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/Dialog';
 import { useConfirm } from '../../components/ui/Confirm';
 import Button from '../../components/ui/Button';
 import SearchInput from '../../components/admin/SearchInput';
-import { PeriodPicker } from '../../components/admin/AccessFields';
 import AudienceEditor from '../../components/admin/AudienceEditor';
 import UnitSelect from '../../components/admin/UnitSelect';
 import { audienceFrom, audiencePayload, audienceProblem, audienceSummary, emptyAudience } from '../../lib/audience';
@@ -22,7 +20,7 @@ import FileUpload from '../../components/FileUpload';
 import FileList from '../../components/FileList';
 import FileViewer from '../../components/FileViewer';
 
-const blank = { lessonName: '', lessonDescription: '', youtubeLink: '', content: '', unitId: '', audience: emptyAudience, displayOrder: '', month: '', year: '' };
+const blank = { lessonName: '', lessonDescription: '', youtubeLink: '', content: '', unitId: '', audience: emptyAudience, displayOrder: '' };
 const LESSON_WORDS = { from: 'From', until: 'Until', none: 'Any time', always: 'Visible' };
 
 const typeIcon = { VIDEO: Video, TEXT: FileText, MIXED: Paperclip };
@@ -77,7 +75,6 @@ const ManageLessons = () => {
     setForm(l ? {
       lessonName: l.lessonName ?? '', lessonDescription: l.lessonDescription ?? '', youtubeLink: l.youtubeLink ?? '', content: l.content ?? '',
       unitId: l.unitId ? String(l.unitId) : '', audience: audienceFrom(l), displayOrder: String(l.displayOrder ?? ''),
-      month: l.month ? String(l.month) : '', year: l.year ? String(l.year) : '',
     } : { ...blank, unitId: unitFilter, displayOrder: String((lessons.data?.filter((x) => !unitFilter || String(x.unitId) === unitFilter).length ?? 0) + 1) });
   };
 
@@ -102,8 +99,6 @@ const ManageLessons = () => {
       audience: audiencePayload(audience),
       unitId: form.unitId ? Number(form.unitId) : null,
       displayOrder: form.displayOrder ? Number(form.displayOrder) : 0,
-      month: form.month ? Number(form.month) : null,
-      year: form.month ? Number(form.year || new Date().getFullYear()) : null,
     });
   };
 
@@ -144,12 +139,12 @@ const ManageLessons = () => {
                           <div className="min-w-0"><p className="font-medium">{l.lessonName}</p><p className="text-sm text-ink-2 truncate max-w-md">{unitPathOf.get(l.unitId) ?? l.unitName ?? 'No unit'}</p></div>
                         </div>
                       </Td>
-                      <Td>{l.month ? <Badge tone="brand">{periodLabel(l.month, l.year)}</Badge> : <span className="text-sm text-ink-3">Free</span>}</Td>
+                      <Td>{!sum.sameFee ? <Badge>Varies by batch</Badge> : sum.fee ? <Badge tone="brand">{sum.fee.replace(' fee', '')}</Badge> : <span className="text-sm text-ink-3">Free</span>}</Td>
                       <Td className="text-sm">
-                        {!sum.rows.length ? <Badge tone="due">No batches</Badge> : sum.same ? (
+                        {!sum.rows.length ? <Badge tone="due">No batches</Badge> : sum.same && sum.sameFee ? (
                           <><p>{sum.rows.map((r) => r.batchName).join(', ')}</p>{sum.text !== LESSON_WORDS.none && <p className="text-xs text-ink-3">{sum.text}</p>}</>
                         ) : (
-                          <ul className="space-y-0.5">{sum.rows.map((r) => <li key={r.batchId}><span className="font-medium">{r.batchName}</span> <span className="text-xs text-ink-3">{r.text}</span></li>)}</ul>
+                          <ul className="space-y-0.5">{sum.rows.map((r) => <li key={r.batchId}><span className="font-medium">{r.batchName}</span> <span className="text-xs text-ink-3">{[sum.same ? null : r.text, sum.sameFee ? null : r.fee ?? 'free'].filter(Boolean).join(' · ')}</span></li>)}</ul>
                         )}
                       </Td>
                       <Td>{l.isActive !== false ? <Badge tone="credit">Published</Badge> : <Badge>Hidden</Badge>}</Td>
@@ -201,9 +196,6 @@ const ManageLessons = () => {
 
           <fieldset className="space-y-4 pt-5 border-t border-line">
             <AudienceEditor kind="lesson" value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
-            <Field label="Unlocks with the fee for" hint="Students who haven't paid this month see the lesson locked.">
-              {(p) => <PeriodPicker id={p.id} month={form.month} year={form.year} onChange={({ month, year }) => setForm((f) => ({ ...f, month, year }))} />}
-            </Field>
           </fieldset>
 
           <fieldset className="pt-5 border-t border-line">

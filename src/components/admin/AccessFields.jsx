@@ -18,3 +18,25 @@ export const PeriodPicker = ({ month, year, onChange, id }) => {
     </div>
   );
 };
+
+/**
+ * Compact fee-month picker for one batch's row: "Free", or a month from last
+ * January to two years ahead. Value is "YYYY-MM" ('' = free).
+ */
+export const FeeSelect = ({ month, year, onChange, className, ...props }) => {
+  const thisYear = new Date().getFullYear();
+  const options = [];
+  for (let y = thisYear - 1; y <= thisYear + 2; y++) {
+    for (let m = 1; m <= 12; m++) options.push({ value: `${y}-${m}`, label: `${MONTHS[m - 1].slice(0, 3)} ${y}` });
+  }
+  const value = month ? `${year || thisYear}-${Number(month)}` : '';
+  return (
+    <Select {...props} className={className} value={value} onChange={(e) => {
+      const [y, m] = e.target.value ? e.target.value.split('-') : ['', ''];
+      onChange({ month: m, year: y });
+    }}>
+      <option value="">Free</option>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </Select>
+  );
+};
