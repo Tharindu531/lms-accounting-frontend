@@ -17,6 +17,7 @@ import { BatchPicker, PeriodPicker } from '../../components/admin/AccessFields';
 import QuestionEditor from '../../components/admin/QuestionEditor';
 import QuizPlayer from '../../components/quiz/QuizPlayer';
 import { cn } from '../../lib/cn';
+import { OPTION_KEYS, optionLabel } from '../../lib/options';
 
 /* ---------- Status from the schedule ---------- */
 
@@ -141,13 +142,13 @@ const QuestionCard = ({ q, index, count, locked, onEdit, onRemove, onMove, dragP
 /* Options read top-to-bottom, A to E, like the paper. Short options use two columns
    filled down (A B C | D E) instead of across, which read A, C, E down the left. */
 const OptionList = ({ q }) => {
-  const letters = ['A', 'B', 'C', 'D', 'E'].filter((l) => q[`option${l}`]);
+  const letters = OPTION_KEYS.filter((l) => q[`option${l}`]);
   const short = letters.every((l) => q[`option${l}`].length <= 38);
   return (
     <ol className={cn('mt-2 max-w-2xl gap-x-8 gap-y-0.5 text-[13.5px] leading-normal', short ? 'grid sm:grid-flow-col sm:grid-rows-3 sm:auto-cols-fr' : 'space-y-0.5')}>
       {letters.map((l) => (
         <li key={l} className={cn('flex gap-2', q.correctAnswer === l ? 'text-credit font-medium' : 'text-ink-2')}>
-          <span className="w-4 shrink-0 tabular">{l}.</span><span>{q[`option${l}`]}</span>
+          <span className="w-4 shrink-0 tabular">{optionLabel(l)}.</span><span>{q[`option${l}`]}</span>
           {q.correctAnswer === l && <CheckCircle2 size={14} className="mt-0.5 shrink-0" aria-label="correct answer" />}
         </li>
       ))}

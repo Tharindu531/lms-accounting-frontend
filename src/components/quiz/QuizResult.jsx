@@ -13,6 +13,7 @@ import { Panel, PanelHeader, Badge, ProgressRing, ProgressBar } from '../ui/prim
 import Button from '../ui/Button';
 import FileViewer from '../FileViewer';
 import { cn } from '../../lib/cn';
+import { optionLabel } from '../../lib/options';
 
 const mmss = (s) => `${Math.floor((s ?? 0) / 60)}:${String((s ?? 0) % 60).padStart(2, '0')}`;
 
@@ -82,7 +83,7 @@ const AnswerRow = ({ detail, index, quizMarksId, canUpload, onView }) => {
   const state = writing ? (pending ? 'pending' : 'marked') : withheld ? 'withheld' : detail.isCorrect ? 'right' : 'wrong';
   const Icon = { right: CheckCircle2, wrong: XCircle, pending: Hourglass, marked: MessageSquare, withheld: CircleDashed }[state];
   const iconTone = { right: 'text-credit', wrong: 'text-debit', pending: 'text-due', marked: 'text-brand', withheld: 'text-ink-3' }[state];
-  const opt = (letter) => (letter ? `${letter}${detail.options?.[letter] ? `. ${detail.options[letter]}` : ''}` : t('quiz.notAnswered'));
+  const opt = (letter) => (letter ? `${optionLabel(letter)}${detail.options?.[letter] ? `. ${detail.options[letter]}` : ''}` : t('quiz.notAnswered'));
   const earned = writing ? detail.adminMarks : detail.marks;
 
   return (

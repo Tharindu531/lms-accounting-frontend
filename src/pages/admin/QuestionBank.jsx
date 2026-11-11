@@ -11,6 +11,7 @@ import Button from '../../components/ui/Button';
 import SearchInput from '../../components/admin/SearchInput';
 import QuestionEditor from '../../components/admin/QuestionEditor';
 import { cn } from '../../lib/cn';
+import { optionLabel } from '../../lib/options';
 
 const QuestionBank = () => {
   const qc = useQueryClient();
@@ -90,7 +91,7 @@ const QuestionBank = () => {
                       {q.questionType !== 'WRITING' && q.correctAnswer && (
                         <p className="mt-1 text-[13px] leading-snug text-credit flex gap-1.5">
                           <CheckCircle2 size={14} className="mt-px shrink-0" aria-label="Correct answer" />
-                          <span>{q.correctAnswer}. {q[`option${q.correctAnswer}`]}</span>
+                          <span>{optionLabel(q.correctAnswer)}. {q[`option${q.correctAnswer}`]}</span>
                         </p>
                       )}
                       <p className="text-xs text-ink-3 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">

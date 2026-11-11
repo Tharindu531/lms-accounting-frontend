@@ -13,8 +13,9 @@ import FileUpload from '../FileUpload';
 import FileList from '../FileList';
 import FileViewer from '../FileViewer';
 import { cn } from '../../lib/cn';
+import { OPTION_KEYS, optionLabel } from '../../lib/options';
 
-const LETTERS = ['A', 'B', 'C', 'D', 'E'];
+const LETTERS = OPTION_KEYS;
 const blank = { questionText: '', questionType: 'MCQ', optionA: '', optionB: '', optionC: '', optionD: '', optionE: '', correctAnswer: 'A', marks: 1, unitId: '' };
 const fromQuestion = (q, unitId) => (q ? {
   questionText: q.questionText ?? '', questionType: q.questionType ?? 'MCQ',
@@ -110,10 +111,10 @@ const QuestionEditor = ({ open, onOpenChange, question, units, defaultUnitId, on
                 <div key={l} className={cn('flex items-center gap-2 rounded-control border p-1.5 pl-2', form.correctAnswer === l ? 'border-credit bg-credit-soft' : 'border-line')}>
                   <label className="flex items-center gap-2 shrink-0 cursor-pointer">
                     <input type="radio" name="correct" value={l} checked={form.correctAnswer === l} onChange={() => setForm((f) => ({ ...f, correctAnswer: l }))}
-                      className="h-4 w-4 accent-[var(--credit)]" aria-label={`Option ${l} is correct`} />
-                    <span className="w-5 text-sm font-semibold text-ink-2">{l}</span>
+                      className="h-4 w-4 accent-[var(--credit)]" aria-label={`Option ${optionLabel(l)} is correct`} />
+                    <span className="w-5 text-sm font-semibold text-ink-2 tabular">{optionLabel(l)}</span>
                   </label>
-                  <Input value={form[`option${l}`]} onChange={set(`option${l}`)} required aria-label={`Option ${l}`} className="border-0 bg-transparent focus:ring-0 h-9" />
+                  <Input value={form[`option${l}`]} onChange={set(`option${l}`)} required aria-label={`Option ${optionLabel(l)}`} className="border-0 bg-transparent focus:ring-0 h-9" />
                 </div>
               ))}
             </div>

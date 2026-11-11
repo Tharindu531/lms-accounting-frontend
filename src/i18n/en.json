@@ -201,7 +201,7 @@
     "yourAnswerLabel": "Your answer",
     "writePlaceholder": "Write your answer here…",
     "uploadLater": "You can add photos of your working after you submit.",
-    "keysHint": "Tip: press A–E to choose, ← → to move, F to flag.",
+    "keysHint": "Tip: press 1–5 to choose, ← → to move, F to flag.",
     "answeredOf": "{{n}} of {{total}} answered",
     "reviewAnswers": "Review answers",
     "reviewTitle": "Check before you submit",

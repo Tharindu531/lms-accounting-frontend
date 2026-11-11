@@ -16,10 +16,10 @@ import { errorMessage } from '../../lib/errors';
 import { relativeTime } from '../../lib/time';
 import { cn } from '../../lib/cn';
 import FileViewer from '../FileViewer';
+import { OPTION_KEYS, optionLabel, optionKeyFromInput } from '../../lib/options';
 
 // How often in-progress answers are sent to the server while a quiz is open.
 const SERVER_SYNC_MS = 15000;
-const OPTIONS = ['A', 'B', 'C', 'D', 'E'];
 
 const formatClock = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
@@ -220,8 +220,8 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
       if (reviewing || timedOut || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = e.target.tagName;
       if (tag === 'TEXTAREA' || tag === 'INPUT' || e.target.isContentEditable || document.querySelector('[role="dialog"]')) return;
-      const k = e.key.toUpperCase();
-      if (question?.questionType !== 'WRITING' && OPTIONS.includes(k) && question[`option${k}`]) { answer(question.id, k); e.preventDefault(); }
+      const k = e.key.length === 1 ? optionKeyFromInput(e.key) : null;
+      if (question?.questionType !== 'WRITING' && k && question[`option${k}`]) { answer(question.id, k); e.preventDefault(); }
       else if (e.key === 'ArrowRight') go(current + 1);
       else if (e.key === 'ArrowLeft') go(current - 1);
       else if (k === 'F' && question) toggleFlag(question.id);
@@ -359,7 +359,7 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
                     </>
                   ) : (
                     <div role="radiogroup" aria-labelledby="q-text" className="space-y-2.5">
-                      {OPTIONS.filter((o) => question[`option${o}`]).map((o) => {
+                      {OPTION_KEYS.filter((o) => question[`option${o}`]).map((o) => {
                         const selected = answers[question.id] === o;
                         return (
                           <button key={o} type="button" role="radio" aria-checked={selected} disabled={timedOut}
@@ -367,7 +367,7 @@ const QuizPlayer = ({ quiz, user, onSubmitted, onExit, preview = false }) => {
                             className={cn('w-full flex items-start gap-3 text-left min-h-12 px-3.5 py-3 rounded-panel border transition-colors',
                               selected ? 'border-brand bg-brand-soft ring-1 ring-brand' : 'border-line bg-surface hover:border-line-strong')}>
                             <span className={cn('h-7 w-7 shrink-0 rounded-[7px] grid place-items-center text-[13px] font-semibold',
-                              selected ? 'bg-brand text-on-brand' : 'bg-sunken text-ink-2')}>{o}</span>
+                              selected ? 'bg-brand text-on-brand' : 'bg-sunken text-ink-2')}>{optionLabel(o)}</span>
                             <span className="pt-0.5 text-[15px] whitespace-pre-wrap leading-relaxed">{question[`option${o}`]}</span>
                           </button>
                         );
