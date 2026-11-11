@@ -182,7 +182,11 @@
     "openOnYouTube": "ඒ වෙනුවට YouTube හි නරඹන්න",
     "playVideo": "{{title}} ධාවනය කරන්න",
     "play": "පාඩම ධාවනය කරන්න",
-    "resumeFrom": "{{time}} සිට නැවත අරඹන්න"
+    "resumeFrom": "{{time}} සිට නැවත අරඹන්න",
+    "opensOn": "{{time}} විවෘත වේ",
+    "notYetOpenTitle": "මෙම පාඩම {{time}} විවෘත වේ",
+    "notYetOpenHint": "එය ඔබේ කණ්ඩායමට නියමිත කර ඇත. එවිට නැවත පැමිණෙන්න.",
+    "inUnit": "මෙම ඒකකයේ"
   },
   "quiz": {
     "timeLeft": "ඉතිරි කාලය {{time}}",

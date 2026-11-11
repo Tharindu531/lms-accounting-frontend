@@ -162,7 +162,8 @@ export const quizAPI = {
   create: (data) => api.post('/api/quizzes', data),
   update: (id, data) => api.put(`/api/quizzes/${id}`, data),
   delete: (id) => api.delete(`/api/quizzes/${id}`),
-  addQuestion: (quizId, data) => api.post(`/api/quizzes/${quizId}/questions`, data),
+  // Questions always come from the bank: picked by hand, or drawn at random.
+  addFromBank: (quizId, questionIds) => api.post(`/api/quizzes/${quizId}/questions/from-bank`, { questionIds }),
   updateQuestion: (quizId, questionId, data) => api.put(`/api/quizzes/${quizId}/questions/${questionId}`, data),
   removeQuestion: (quizId, questionId) => api.delete(`/api/quizzes/${quizId}/questions/${questionId}`),
   reorderQuestions: (quizId, ids) => api.put(`/api/quizzes/${quizId}/questions/order`, ids),
@@ -172,6 +173,9 @@ export const quizAPI = {
   // Question Bank
   getQuestionBank: (unitId) => api.get('/api/quizzes/question-bank', { params: { unitId } }),
   getQuestionBankStats: () => api.get('/api/quizzes/question-bank/stats'),
+  // Repeated params (unitIds=1&unitIds=2), the shape Spring reads as a list.
+  searchBank: (params) => api.get('/api/quizzes/question-bank/search', { params, paramsSerializer: { indexes: null } }),
+  randomDraw: (data) => api.post('/api/quizzes/question-bank/random-draw', data),
   addToQuestionBank: (data) => api.post('/api/quizzes/question-bank', data),
   updateBankQuestion: (id, data) => api.put(`/api/quizzes/question-bank/${id}`, data),
   deleteBankQuestion: (id) => api.delete(`/api/quizzes/question-bank/${id}`),
@@ -212,7 +216,10 @@ export const batchAPI = {
   getAll: () => api.get('/api/admin/batches'),
   create: (data) => api.post('/api/admin/batches', data),
   update: (id, data) => api.put(`/api/admin/batches/${id}`, data),
-  delete: (id) => api.delete(`/api/admin/batches/${id}`),
+  deletePreview: (id) => api.get(`/api/admin/batches/${id}/delete-preview`),
+  export: (id) => api.get(`/api/admin/batches/${id}/export`, { responseType: 'blob' }),
+  // confirm = the batch name as the admin typed it; the server checks it again.
+  delete: (id, confirm) => api.delete(`/api/admin/batches/${id}`, { params: { confirm } }),
 };
 
 // Unit APIs
@@ -225,6 +232,7 @@ export const unitAPI = {
   create: (data) => api.post('/api/units', data),
   update: (id, data) => api.put(`/api/units/${id}`, data),
   delete: (id) => api.delete(`/api/units/${id}`),
+  reorder: (parentId, ids) => api.put('/api/units/order', { parentId, ids }),
 };
 
 // Admin Dashboard APIs

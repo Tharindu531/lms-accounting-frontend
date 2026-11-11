@@ -170,7 +170,7 @@ const Dashboard = () => {
   const now = colomboNow();
 
   const ordered = useMemo(() => orderLessons(lessons.data, units.data), [lessons.data, units.data]);
-  const available = ordered.filter((l) => !l.locked);
+  const available = ordered.filter((l) => !l.locked && !l.notYetOpen);
   const done = available.filter((l) => l.completed).length;
   const lockedCount = ordered.length - available.length;
   const paidThisMonth = paidSet(history.data).has(`${now.year}-${now.month}`);

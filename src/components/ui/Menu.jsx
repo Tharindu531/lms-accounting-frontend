@@ -31,3 +31,14 @@ export const MenuRadioItem = ({ children, ...p }) => (
     <DM.ItemIndicator><span className="h-1.5 w-1.5 rounded-full bg-brand block" /></DM.ItemIndicator>
   </DM.RadioItem>
 );
+
+/** A ticked/unticked item that keeps the menu open, for multi-select filters. */
+export const MenuCheckboxItem = ({ className, children, ...p }) => (
+  <DM.CheckboxItem onSelect={(e) => e.preventDefault()}
+    className={cn('group flex items-center gap-2.5 px-2.5 min-h-9 rounded-[7px] cursor-pointer outline-none select-none text-ink data-[highlighted]:bg-sunken', className)} {...p}>
+    <span className="h-4 w-4 shrink-0 rounded-[4px] border border-line-strong grid place-items-center group-data-[state=checked]:bg-brand group-data-[state=checked]:border-brand" aria-hidden>
+      <DM.ItemIndicator><svg viewBox="0 0 12 12" className="h-3 w-3 text-on-brand"><path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></DM.ItemIndicator>
+    </span>
+    {children}
+  </DM.CheckboxItem>
+);

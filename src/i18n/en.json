@@ -182,7 +182,11 @@
     "openOnYouTube": "Watch on YouTube instead",
     "playVideo": "Play {{title}}",
     "play": "Play lesson",
-    "resumeFrom": "Resume from {{time}}"
+    "resumeFrom": "Resume from {{time}}",
+    "opensOn": "Opens {{time}}",
+    "notYetOpenTitle": "This lesson opens {{time}}",
+    "notYetOpenHint": "It's scheduled for your batch. Come back then.",
+    "inUnit": "In this unit"
   },
   "quiz": {
     "timeLeft": "{{time}} left",

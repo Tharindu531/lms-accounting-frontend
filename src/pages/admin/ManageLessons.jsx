@@ -7,17 +7,23 @@ import { unwrap } from '../../lib/queryClient';
 import { errorMessage } from '../../lib/errors';
 import { youTubeId } from '../../lib/queries';
 import { periodLabel } from '../../lib/period';
-import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, Input, Textarea, Select, Table, Th, Td } from '../../components/ui/primitives';
+import { Panel, PageHeader, Badge, SkeletonRows, EmptyState, ErrorState, Field, Input, Textarea, Table, Th, Td } from '../../components/ui/primitives';
 import { Modal } from '../../components/ui/Dialog';
 import { useConfirm } from '../../components/ui/Confirm';
 import Button from '../../components/ui/Button';
 import SearchInput from '../../components/admin/SearchInput';
-import { BatchPicker, PeriodPicker } from '../../components/admin/AccessFields';
+import { PeriodPicker } from '../../components/admin/AccessFields';
+import AudienceEditor from '../../components/admin/AudienceEditor';
+import UnitSelect from '../../components/admin/UnitSelect';
+import { audienceFrom, audiencePayload, audienceProblem, audienceSummary, emptyAudience } from '../../lib/audience';
+import { unitTree } from '../../lib/units';
+import { useBatchList } from '../../lib/useBatchList';
 import FileUpload from '../../components/FileUpload';
 import FileList from '../../components/FileList';
 import FileViewer from '../../components/FileViewer';
 
-const blank = { lessonName: '', lessonDescription: '', youtubeLink: '', content: '', unitId: '', accessibleBatches: [], displayOrder: '', month: '', year: '' };
+const blank = { lessonName: '', lessonDescription: '', youtubeLink: '', content: '', unitId: '', audience: emptyAudience, displayOrder: '', month: '', year: '' };
+const LESSON_WORDS = { from: 'From', until: 'Until', none: 'Any time', always: 'Visible' };
 
 const typeIcon = { VIDEO: Video, TEXT: FileText, MIXED: Paperclip };
 
@@ -50,14 +56,19 @@ const ManageLessons = () => {
   const [form, setForm] = useState(blank);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const unitList = useMemo(() => [...(units.data ?? [])].filter((u) => u.isActive !== false).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)), [units.data]);
-  const unitOrder = useMemo(() => new Map(unitList.map((u, i) => [u.id, i])), [unitList]);
+  const batches = useBatchList();
+  const unitList = useMemo(() => (units.data ?? []).filter((u) => u.isActive !== false), [units.data]);
+  // Course order: each unit, then its sub-units. Filtering by a unit includes its sub-units.
+  const tree = useMemo(() => unitTree(unitList), [unitList]);
+  const unitOrder = useMemo(() => new Map(tree.map((u, i) => [u.id, i])), [tree]);
+  const unitPathOf = useMemo(() => new Map(tree.map((u) => [u.id, u.parentName ? `${u.parentName} › ${u.name}` : u.name])), [tree]);
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const branch = unitFilter ? new Set([Number(unitFilter), ...(tree.find((u) => String(u.id) === unitFilter)?.children ?? []).map((c) => c.id)]) : null;
     return [...(lessons.data ?? [])]
-      .filter((l) => (!unitFilter || String(l.unitId) === unitFilter) && (!q || l.lessonName?.toLowerCase().includes(q) || l.lessonDescription?.toLowerCase().includes(q)))
+      .filter((l) => (!branch || branch.has(l.unitId)) && (!q || l.lessonName?.toLowerCase().includes(q) || l.lessonDescription?.toLowerCase().includes(q)))
       .sort((a, b) => (unitOrder.get(a.unitId) ?? 999) - (unitOrder.get(b.unitId) ?? 999) || (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
-  }, [lessons.data, search, unitFilter, unitOrder]);
+  }, [lessons.data, search, unitFilter, unitOrder, tree]);
 
   const refresh = () => { qc.invalidateQueries({ queryKey: ['admin', 'lessons'] }); qc.invalidateQueries({ queryKey: ['lessons'] }); };
 
@@ -65,7 +76,7 @@ const ManageLessons = () => {
     setEditing(l ?? {});
     setForm(l ? {
       lessonName: l.lessonName ?? '', lessonDescription: l.lessonDescription ?? '', youtubeLink: l.youtubeLink ?? '', content: l.content ?? '',
-      unitId: l.unitId ? String(l.unitId) : '', accessibleBatches: Array.from(l.accessibleBatches ?? []), displayOrder: String(l.displayOrder ?? ''),
+      unitId: l.unitId ? String(l.unitId) : '', audience: audienceFrom(l), displayOrder: String(l.displayOrder ?? ''),
       month: l.month ? String(l.month) : '', year: l.year ? String(l.year) : '',
     } : { ...blank, unitId: unitFilter, displayOrder: String((lessons.data?.filter((x) => !unitFilter || String(x.unitId) === unitFilter).length ?? 0) + 1) });
   };
@@ -82,10 +93,13 @@ const ManageLessons = () => {
 
   const submit = (e) => {
     e.preventDefault();
-    if (!form.accessibleBatches.length) { toast.error('Choose at least one batch.'); return; }
+    const problem = audienceProblem(form.audience, batches.names, 'end');
+    if (problem) { toast.error(problem); return; }
     if (form.youtubeLink && !youTubeId(form.youtubeLink)) { toast.error('That doesn\'t look like a YouTube link.'); return; }
+    const { audience, ...rest } = form;
     save.mutate({
-      ...form,
+      ...rest,
+      audience: audiencePayload(audience),
       unitId: form.unitId ? Number(form.unitId) : null,
       displayOrder: form.displayOrder ? Number(form.displayOrder) : 0,
       month: form.month ? Number(form.month) : null,
@@ -108,10 +122,7 @@ const ManageLessons = () => {
       <Panel>
         <div className="flex flex-wrap gap-3 p-4 border-b border-line">
           <SearchInput value={search} onChange={setSearch} placeholder="Search lessons" className="flex-1 min-w-56" />
-          <Select aria-label="Unit" value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-60">
-            <option value="">All units</option>
-            {unitList.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </Select>
+          <UnitSelect aria-label="Unit" units={unitList} empty="All units" value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-60" />
         </div>
         {lessons.isPending ? <SkeletonRows rows={6} /> : lessons.isError ? <ErrorState description={errorMessage(lessons.error)} onRetry={lessons.refetch} />
           : rows.length === 0 ? (
@@ -119,21 +130,28 @@ const ManageLessons = () => {
               action={!search && <Button icon={Plus} onClick={() => open(null)}>New lesson</Button>} />
           ) : (
             <Table minWidth={760}>
-              <thead><tr><Th className="w-14">#</Th><Th>Lesson</Th><Th>Fee month</Th><Th>Batches</Th><Th>Status</Th><Th className="w-24" /></tr></thead>
+              <thead><tr><Th className="w-14">#</Th><Th>Lesson</Th><Th>Fee month</Th><Th>Who can see it</Th><Th>Status</Th><Th className="w-24" /></tr></thead>
               <tbody>
                 {rows.map((l) => {
                   const Icon = typeIcon[l.lessonType] ?? BookOpen;
+                  const sum = audienceSummary(l, 0, LESSON_WORDS);
                   return (
                     <tr key={l.id} className="hover:bg-sunken/50">
                       <Td className="tabular text-ink-3">{l.displayOrder}</Td>
                       <Td>
                         <div className="flex items-start gap-2.5">
                           <Icon size={16} className="text-ink-3 mt-1 shrink-0" aria-label={l.lessonType?.toLowerCase()} />
-                          <div className="min-w-0"><p className="font-medium">{l.lessonName}</p><p className="text-sm text-ink-2 truncate max-w-md">{l.unitName ?? 'No unit'}</p></div>
+                          <div className="min-w-0"><p className="font-medium">{l.lessonName}</p><p className="text-sm text-ink-2 truncate max-w-md">{unitPathOf.get(l.unitId) ?? l.unitName ?? 'No unit'}</p></div>
                         </div>
                       </Td>
                       <Td>{l.month ? <Badge tone="brand">{periodLabel(l.month, l.year)}</Badge> : <span className="text-sm text-ink-3">Free</span>}</Td>
-                      <Td className="tabular text-sm">{Array.from(l.accessibleBatches ?? []).sort().join(', ')}</Td>
+                      <Td className="text-sm">
+                        {!sum.rows.length ? <Badge tone="due">No batches</Badge> : sum.same ? (
+                          <><p>{sum.rows.map((r) => r.batchName).join(', ')}</p>{sum.text !== LESSON_WORDS.none && <p className="text-xs text-ink-3">{sum.text}</p>}</>
+                        ) : (
+                          <ul className="space-y-0.5">{sum.rows.map((r) => <li key={r.batchId}><span className="font-medium">{r.batchName}</span> <span className="text-xs text-ink-3">{r.text}</span></li>)}</ul>
+                        )}
+                      </Td>
                       <Td>{l.isActive !== false ? <Badge tone="credit">Published</Badge> : <Badge>Hidden</Badge>}</Td>
                       <Td>
                         <div className="flex justify-end gap-1">
@@ -160,10 +178,7 @@ const ManageLessons = () => {
             <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
               <Field label="Unit">
                 {(p) => (
-                  <Select {...p} value={form.unitId} onChange={set('unitId')}>
-                    <option value="">No unit</option>
-                    {unitList.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                  </Select>
+                  <UnitSelect {...p} units={unitList} empty="No unit" value={form.unitId} onChange={set('unitId')} />
                 )}
               </Field>
               <Field label="Order in unit">{(p) => <Input {...p} type="number" min="0" value={form.displayOrder} onChange={set('displayOrder')} />}</Field>
@@ -185,7 +200,7 @@ const ManageLessons = () => {
           </fieldset>
 
           <fieldset className="space-y-4 pt-5 border-t border-line">
-            <Field label="Batches who can see it" required>{(p) => <BatchPicker id={p.id} value={form.accessibleBatches} onChange={(v) => setForm((f) => ({ ...f, accessibleBatches: v }))} />}</Field>
+            <AudienceEditor kind="lesson" value={form.audience} onChange={(audience) => setForm((f) => ({ ...f, audience }))} />
             <Field label="Unlocks with the fee for" hint="Students who haven't paid this month see the lesson locked.">
               {(p) => <PeriodPicker id={p.id} month={form.month} year={form.year} onChange={({ month, year }) => setForm((f) => ({ ...f, month, year }))} />}
             </Field>

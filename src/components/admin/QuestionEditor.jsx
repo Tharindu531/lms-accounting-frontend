@@ -5,7 +5,8 @@ import { ListChecks, PenLine, ClipboardPaste } from 'lucide-react';
 import { fileAPI } from '../../services/api';
 import { unwrap } from '../../lib/queryClient';
 import { errorMessage } from '../../lib/errors';
-import { Field, Input, Textarea, Select } from '../ui/primitives';
+import { Field, Input, Textarea } from '../ui/primitives';
+import UnitSelect from './UnitSelect';
 import { Modal } from '../ui/Dialog';
 import { useConfirm } from '../ui/Confirm';
 import Button from '../ui/Button';
@@ -53,7 +54,7 @@ const QuestionFiles = ({ questionId }) => {
  * Create or edit one question (MCQ with up to five options, or a written answer).
  * After a new question is saved the editor stays open so images can be added.
  */
-const QuestionEditor = ({ open, onOpenChange, question, units, defaultUnitId, onSave, title }) => {
+const QuestionEditor = ({ open, onOpenChange, question, units, defaultUnitId, onSave, title, note }) => {
   const [form, setForm] = useState(() => fromQuestion(question, defaultUnitId));
   const [savedId, setSavedId] = useState(question?.id ?? null);
   const [saving, setSaving] = useState(false);
@@ -91,6 +92,7 @@ const QuestionEditor = ({ open, onOpenChange, question, units, defaultUnitId, on
         <Button type="submit" form="question-form" loading={saving}>{savedId ? 'Save question' : 'Add question'}</Button>
       </>}>
       <form id="question-form" onSubmit={submit} className="space-y-5">
+        {note && <p className="rounded-control bg-brand-soft/60 px-3 py-2 text-sm text-ink-2">{note}</p>}
         <div role="radiogroup" aria-label="Question type" className="grid grid-cols-2 p-1 rounded-control bg-sunken max-w-sm">
           {[['MCQ', ListChecks, 'Multiple choice'], ['WRITING', PenLine, 'Written answer']].map(([v, Icon, label]) => (
             <button key={v} type="button" role="radio" aria-checked={form.questionType === v} onClick={() => setForm((f) => ({ ...f, questionType: v }))}
@@ -129,10 +131,7 @@ const QuestionEditor = ({ open, onOpenChange, question, units, defaultUnitId, on
           <Field label="Marks" required>{(p) => <Input {...p} type="number" min="1" max="100" value={form.marks} onChange={set('marks')} />}</Field>
           <Field label="Unit" hint="Used for the per-unit score breakdown.">
             {(p) => (
-              <Select {...p} value={form.unitId} onChange={set('unitId')}>
-                <option value="">No unit</option>
-                {(units ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </Select>
+              <UnitSelect {...p} units={units} empty="No unit" value={form.unitId} onChange={set('unitId')} />
             )}
           </Field>
         </div>

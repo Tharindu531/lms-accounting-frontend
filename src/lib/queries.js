@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { lessonAPI, quizAPI, paymentAPI, unitAPI } from '../services/api';
 import { unwrap } from './queryClient';
+import { unitTree } from './units';
 
 /** Query keys in one place, so a mutation can invalidate exactly what it changed. */
 export const keys = {
@@ -51,7 +52,8 @@ export const youTubeId = (url) => {
 
 /** Lessons in curriculum order: by unit display order, then the lesson's own order. */
 export const orderLessons = (lessons, units) => {
-  const unitOrder = new Map((units ?? []).map((u, i) => [u.id, u.displayOrder ?? i]));
+  // Course order: each unit, then its sub-units (see unitTree).
+  const unitOrder = new Map(unitTree(units ?? []).map((u, i) => [u.id, i]));
   return [...(lessons ?? [])].sort((a, b) =>
     (unitOrder.get(a.unitId) ?? 999) - (unitOrder.get(b.unitId) ?? 999) ||
     (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.id - b.id);
@@ -59,8 +61,8 @@ export const orderLessons = (lessons, units) => {
 
 /** The lesson to resume: one already started, else the next one not yet done. */
 export const nextLesson = (ordered) =>
-  ordered.find((l) => !l.locked && !l.completed && (l.watchedSeconds ?? 0) > 0) ??
-  ordered.find((l) => !l.locked && !l.completed) ?? null;
+  ordered.find((l) => !l.locked && !l.notYetOpen && !l.completed && (l.watchedSeconds ?? 0) > 0) ??
+  ordered.find((l) => !l.locked && !l.notYetOpen && !l.completed) ?? null;
 
 export const formatDuration = (seconds) => {
   const s = Math.max(0, Math.round(seconds ?? 0));

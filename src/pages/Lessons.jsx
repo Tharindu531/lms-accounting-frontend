@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   CheckCircle2, Circle, Lock, ChevronDown, ChevronLeft, ChevronRight, Paperclip, FileText, Image as ImageIcon,
-  File as FileIcon, BookOpen, PlayCircle, Eye,
+  File as FileIcon, BookOpen, PlayCircle, Eye, CalendarClock,
 } from 'lucide-react';
 import { lessonAPI, fileAPI } from '../services/api';
 import { useLessons, useUnits, orderLessons, keys, formatDuration } from '../lib/queries';
@@ -17,21 +17,45 @@ import Button from '../components/ui/Button';
 import LessonVideo from '../components/student/LessonVideo';
 import FileViewer from '../components/FileViewer';
 import { cn } from '../lib/cn';
+import { unitTree } from '../lib/units';
+import { colomboWallClockToMs, formatDateTime } from '../lib/time';
 
-const groupByUnit = (ordered, t) => {
+/**
+ * One group per top-level unit. Inside it, lessons filed directly under the unit
+ * come first, then one section per sub-unit. A unit without sub-units has a single
+ * untitled section, so it looks as it always did.
+ */
+const groupByUnit = (ordered, units, t) => {
+  const tree = unitTree(units ?? []);
+  const info = new Map(tree.map((u) => [u.id, u]));
   const groups = [];
   const byKey = new Map();
   for (const l of ordered) {
-    const key = l.unitId ?? 'general';
+    const u = info.get(l.unitId);
+    const top = u?.depth ? info.get(u.parentId) : u;
+    const key = top?.id ?? l.unitId ?? 'general';
     if (!byKey.has(key)) {
-      const g = { key, name: l.unitName || t('lessons.general'), lessons: [] };
+      const g = { key, name: top?.name ?? l.unitName ?? t('lessons.general'), lessons: [], sections: [] };
       byKey.set(key, g);
       groups.push(g);
     }
-    byKey.get(key).lessons.push(l);
+    const g = byKey.get(key);
+    g.lessons.push(l);
+    const sectionKey = u?.depth ? u.id : 'direct';
+    let sec = g.sections.find((x) => x.key === sectionKey);
+    if (!sec) {
+      sec = { key: sectionKey, name: u?.depth ? u.name : null, lessons: [] };
+      // Lessons filed directly under the unit stay ahead of its sub-units.
+      if (sectionKey === 'direct') g.sections.unshift(sec); else g.sections.push(sec);
+    }
+    sec.lessons.push(l);
   }
+  for (const g of groups) g.subName = (l) => g.sections.find((x) => x.lessons.includes(l))?.name ?? null;
   return groups;
 };
+
+const opensText = (l) => formatDateTime(colomboWallClockToMs(l.availableFrom));
+const closed = (l) => l.locked || l.notYetOpen;
 
 const useMonthLabel = () => {
   const { t } = useTranslation();
@@ -40,6 +64,7 @@ const useMonthLabel = () => {
 };
 
 const LessonStatusIcon = ({ lesson }) => {
+  if (lesson.notYetOpen) return <CalendarClock size={18} className="text-ink-3" aria-hidden />;
   if (lesson.locked) return <Lock size={18} className="text-ink-3" aria-hidden />;
   if (lesson.completed) return <CheckCircle2 size={18} className="text-credit" aria-hidden />;
   if ((lesson.watchedSeconds ?? 0) > 0) return <PlayCircle size={18} className="text-brand" aria-hidden />;
@@ -56,17 +81,18 @@ const LessonRow = ({ lesson, index, active, compact }) => {
       <LessonStatusIcon lesson={lesson} />
       <span className="w-6 text-sm text-ink-3 tabular shrink-0">{index}.</span>
       <span className="min-w-0 flex-1">
-        <span className={cn('block truncate', lesson.locked ? 'text-ink-2' : 'text-ink', active && 'font-medium')}>{lesson.lessonName}</span>
+        <span className={cn('block truncate', closed(lesson) ? 'text-ink-2' : 'text-ink', active && 'font-medium')}>{lesson.lessonName}</span>
         {!compact && (
           <span className="block text-sm text-ink-3 truncate">
-            {lesson.locked ? t('lessons.lockedUntilPaid', { month: monthLabel(lesson) })
+            {lesson.notYetOpen ? t('lessons.opensOn', { time: opensText(lesson) })
+              : lesson.locked ? t('lessons.lockedUntilPaid', { month: monthLabel(lesson) })
               : lesson.completed ? t('lessons.done')
                 : (lesson.watchedSeconds ?? 0) > 0 ? t('lessons.stoppedAt', { time: formatDuration(lesson.watchedSeconds) })
                   : lesson.lessonDescription}
           </span>
         )}
       </span>
-      {!compact && lesson.month && !lesson.locked && <span className="hidden sm:block text-xs text-ink-3">{monthLabel(lesson)}</span>}
+      {!compact && lesson.month && !closed(lesson) && <span className="hidden sm:block text-xs text-ink-3">{monthLabel(lesson)}</span>}
     </Link>
   );
 };
@@ -76,8 +102,9 @@ const LessonRow = ({ lesson, index, active, compact }) => {
 const UnitSection = ({ group, defaultOpen }) => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
-  const done = group.lessons.filter((l) => l.completed).length;
-  const total = group.lessons.length;
+  const open_ = group.lessons.filter((l) => !l.notYetOpen);
+  const done = open_.filter((l) => l.completed).length;
+  const total = Math.max(1, open_.length);
   return (
     <Panel className="overflow-hidden">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
@@ -90,8 +117,15 @@ const UnitSection = ({ group, defaultOpen }) => {
         <ChevronDown size={18} className={cn('text-ink-3 transition-transform', open && 'rotate-180')} aria-hidden />
       </button>
       {open && (
-        <div className="border-t border-line divide-y divide-line">
-          {group.lessons.map((l, i) => <LessonRow key={l.id} lesson={l} index={i + 1} />)}
+        <div className="border-t border-line">
+          {group.sections.map((sec) => (
+            <div key={sec.key}>
+              {sec.name && <p className="px-4 py-2 text-[13px] font-semibold text-ink-2 bg-sunken/50 border-b border-line">{sec.name}</p>}
+              <div className="divide-y divide-line">
+                {sec.lessons.map((l) => <LessonRow key={l.id} lesson={l} index={group.lessons.indexOf(l) + 1} />)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </Panel>
@@ -100,7 +134,7 @@ const UnitSection = ({ group, defaultOpen }) => {
 
 const Curriculum = ({ groups, done, total }) => {
   const { t } = useTranslation();
-  const firstOpen = groups.findIndex((g) => g.lessons.some((l) => !l.completed && !l.locked));
+  const firstOpen = groups.findIndex((g) => g.lessons.some((l) => !l.completed && !closed(l)));
   return (
     <>
       <PageHeader title={t('nav.lessons')} description={t('lessons.lead', { done, total })} />
@@ -173,11 +207,19 @@ const LessonView = ({ lesson, groups, ordered }) => {
           <ChevronLeft size={16} aria-hidden /> {t('lessons.allLessons')}
         </Link>
         <header>
-          <p className="text-sm text-ink-2">{group?.name}{lesson.month ? ` · ${monthLabel(lesson)}` : ''}</p>
+          <p className="text-sm text-ink-2">{group?.name}{group?.subName(lesson) ? ` › ${group.subName(lesson)}` : ''}{lesson.month ? ` · ${monthLabel(lesson)}` : ''}</p>
           <h1 className="text-[26px] font-semibold mt-0.5">{lesson.lessonName}</h1>
         </header>
 
-        {lesson.locked ? (
+        {lesson.notYetOpen ? (
+          <Panel className="p-6 flex flex-wrap items-center gap-4">
+            <span className="h-12 w-12 rounded-full bg-brand-soft text-brand grid place-items-center"><CalendarClock size={22} aria-hidden /></span>
+            <div className="flex-1 min-w-52">
+              <p className="font-semibold">{t('lessons.notYetOpenTitle', { time: opensText(lesson) })}</p>
+              <p className="text-sm text-ink-2">{t('lessons.notYetOpenHint')}</p>
+            </div>
+          </Panel>
+        ) : lesson.locked ? (
           <Panel className="p-6 flex flex-wrap items-center gap-4">
             <span className="h-12 w-12 rounded-full bg-due-soft text-due grid place-items-center"><Lock size={22} aria-hidden /></span>
             <div className="flex-1 min-w-52">
@@ -252,7 +294,7 @@ const Lessons = () => {
   const lessons = useLessons();
   const units = useUnits();
   const ordered = useMemo(() => orderLessons(lessons.data, units.data), [lessons.data, units.data]);
-  const groups = useMemo(() => groupByUnit(ordered, t), [ordered, t]);
+  const groups = useMemo(() => groupByUnit(ordered, units.data, t), [ordered, units.data, t]);
 
   if (lessons.isPending) {
     return (
@@ -266,7 +308,7 @@ const Lessons = () => {
     return <Panel><ErrorState title={t('common.loadFailed')} description={errorMessage(lessons.error)} onRetry={lessons.refetch} retryLabel={t('common.retry')} /></Panel>;
   }
 
-  const available = ordered.filter((l) => !l.locked);
+  const available = ordered.filter((l) => !closed(l));
   if (lessonId) {
     const lesson = ordered.find((l) => String(l.id) === lessonId);
     if (!lesson) {
