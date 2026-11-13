@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, refreshSession, SessionExpiredError, startSessionKeepAlive } from '../services/api';
 import { getToken, setToken, clearToken } from '../services/tokenStore';
 import {
   clearStoredSession,
@@ -31,64 +31,46 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      // Access token already in memory (same JS session, e.g. hot-reload) — validate it
-      if (savedToken) {
-        try {
-          await authAPI.getMe();
-          if (!cancelled) {
-            setUser(savedUser);
-            setRequirePasswordChange(loadRequirePasswordChange());
-          }
-        } catch {
-          // Access token invalid; fall through to refresh below
-          clearToken();
-          await tryRefresh(cancelled, savedRefresh);
-        } finally {
-          if (!cancelled) setLoading(false);
-        }
-        return;
-      }
-
-      // No access token in memory (page refresh) — use refresh token to restore session silently
-      await tryRefresh(cancelled, savedRefresh);
-      if (!cancelled) setLoading(false);
-    };
-
-    const tryRefresh = async (cancelled, refreshToken) => {
-      if (!refreshToken) {
+      // Access token already in memory (same JS session, e.g. hot-reload): nothing to restore.
+      // If it has expired, the first request renews it through the 401 handler.
+      if (savedToken && savedUser) {
         if (!cancelled) {
-          clearToken();
-          clearStoredSession();
-          setUser(null);
-          setRequirePasswordChange(false);
+          setUser(savedUser);
+          setRequirePasswordChange(loadRequirePasswordChange());
+          setLoading(false);
         }
         return;
       }
 
+      // No access token in memory (page load) — use the refresh token to restore the session.
       try {
-        const response = await authAPI.refresh(refreshToken);
-        const { accessToken, refreshToken: newRefresh, user: freshUser, requirePasswordChange: reqPC } =
-          response.data.data;
-
-        setToken(accessToken);
-        storeRefreshToken(newRefresh);
-        storeUserSession(freshUser, !!reqPC);
-
+        const data = await refreshSession();
         if (!cancelled) {
-          setUser(freshUser);
-          setRequirePasswordChange(!!reqPC);
+          setUser(data.user ?? savedUser);
+          setRequirePasswordChange(!!data.requirePasswordChange);
         }
-      } catch {
-        if (!cancelled) {
+      } catch (err) {
+        if (err instanceof SessionExpiredError) {
+          // The server refused the session: sign out for real.
           clearToken();
           clearStoredSession();
-          setUser(null);
-          setRequirePasswordChange(false);
+          if (!cancelled) {
+            setUser(null);
+            setRequirePasswordChange(false);
+          }
+        } else if (!cancelled) {
+          // Offline, timed out or the server is restarting. Keep the user signed in with
+          // the saved profile; requests renew the token once the server can be reached.
+          setUser(savedUser);
+          setRequirePasswordChange(loadRequirePasswordChange());
         }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
 
     initializeAuth();
+    startSessionKeepAlive();
 
     return () => {
       cancelled = true;
@@ -152,11 +134,11 @@ export const AuthProvider = ({ children }) => {
     user, loading, login, register, logout, changePassword,
     isAdmin, isInstructor, isStudent, isAuthenticated, requirePasswordChange,
   }), [user, loading, login, register, logout, changePassword, isAdmin, isInstructor, isStudent,
-      isAuthenticated, requirePasswordChange]);
+    isAuthenticated, requirePasswordChange]);
 
   return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+      <AuthContext.Provider value={value}>
+        {children}
+      </AuthContext.Provider>
   );
 };

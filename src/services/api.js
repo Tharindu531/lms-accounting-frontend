@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getToken, setToken, clearToken } from './tokenStore';
+import { getToken, getTokenExpiry, setToken, clearToken } from './tokenStore';
 import { clearStoredSession, loadRefreshToken, storeRefreshToken, storeUserSession } from './authSession';
 
 // Base URL is the Railway origin only — all paths include /api explicitly.
@@ -27,17 +27,46 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Silent token refresh on 401.
-// Multiple concurrent 401s are queued while the single refresh call is in flight.
-let isRefreshing = false;
-let pendingQueue = [];
+/**
+ * The server turned the refresh token down (expired, revoked by a password change,
+ * account deleted or disabled). Only this ends the session; a dropped connection,
+ * a timeout or a server restart does not.
+ */
+export class SessionExpiredError extends Error {
+  constructor(message = 'Your session has ended. Please sign in again.') {
+    super(message);
+    this.name = 'SessionExpiredError';
+  }
+}
 
-const drainQueue = (error, newToken) => {
-  pendingQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error);
-    else resolve(newToken);
-  });
-  pendingQueue = [];
+// /api/auth/refresh answers 400 for a bad, expired or revoked refresh token.
+const isRejected = (err) => [400, 401, 403].includes(err?.response?.status);
+
+// One refresh at a time, shared by the 401 handler, app start-up and the keep-alive below.
+let refreshPromise = null;
+
+/** Swaps the stored refresh token for a new token pair. Resolves to the response data. */
+export const refreshSession = () => {
+  if (refreshPromise) return refreshPromise;
+  const refreshToken = loadRefreshToken();
+  if (!refreshToken) return Promise.reject(new SessionExpiredError());
+
+  refreshPromise = axios
+      .post(`${API_URL}/api/auth/refresh`, { refreshToken }, { timeout: 20000 })
+      .then((response) => {
+        const data = response.data.data;
+        setToken(data.accessToken);
+        storeRefreshToken(data.refreshToken);
+        if (data.user) storeUserSession(data.user, !!data.requirePasswordChange);
+        return data;
+      })
+      .catch((err) => {
+        throw isRejected(err) ? new SessionExpiredError(err.response?.data?.message) : err;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  return refreshPromise;
 };
 
 const forceLogout = () => {
@@ -49,69 +78,68 @@ const forceLogout = () => {
 };
 
 api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config;
 
-    // A GET that failed on the network (mobile data dropping, timeout) is safe to
-    // repeat, so retry it once before showing an error.
-    if (!error.response && originalRequest && !originalRequest._networkRetry &&
-        (originalRequest.method || 'get').toLowerCase() === 'get' && !axios.isCancel(error)) {
-      originalRequest._networkRetry = true;
-      await new Promise((r) => setTimeout(r, 800));
-      return api(originalRequest);
-    }
-
-    // Only intercept 401s; skip refresh endpoint to avoid infinite loop
-    if (
-      error.response?.status !== 401 ||
-      originalRequest._retry ||
-      originalRequest.url?.includes('/api/auth/refresh')
-    ) {
-      return Promise.reject(error);
-    }
-
-    originalRequest._retry = true;
-
-    if (isRefreshing) {
-      // Queue this request until the in-flight refresh resolves
-      return new Promise((resolve, reject) => {
-        pendingQueue.push({ resolve, reject });
-      }).then((newToken) => {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      // A GET that failed on the network (mobile data dropping, timeout) is safe to
+      // repeat, so retry it once before showing an error.
+      if (!error.response && originalRequest && !originalRequest._networkRetry &&
+          (originalRequest.method || 'get').toLowerCase() === 'get' && !axios.isCancel(error)) {
+        originalRequest._networkRetry = true;
+        await new Promise((r) => setTimeout(r, 800));
         return api(originalRequest);
-      });
+      }
+
+      // Only intercept 401s; skip refresh endpoint to avoid infinite loop
+      if (
+          error.response?.status !== 401 ||
+          originalRequest._retry ||
+          originalRequest.url?.includes('/api/auth/refresh')
+      ) {
+        return Promise.reject(error);
+      }
+
+      originalRequest._retry = true;
+
+      try {
+        const { accessToken } = await refreshSession();
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Sign out only when the server refused the session. A network error or a
+        // server restart fails this one request; the user stays signed in and the
+        // next request (or the keep-alive below) tries again.
+        if (refreshError instanceof SessionExpiredError) forceLogout();
+        return Promise.reject(refreshError);
+      }
     }
-
-    isRefreshing = true;
-    const refreshToken = loadRefreshToken();
-
-    if (!refreshToken) {
-      isRefreshing = false;
-      forceLogout();
-      return Promise.reject(error);
-    }
-
-    try {
-      const response = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken }, { timeout: 20000 });
-      const { accessToken, refreshToken: newRefresh, user } = response.data.data;
-
-      setToken(accessToken);
-      storeRefreshToken(newRefresh);
-      if (user) storeUserSession(user, false);
-
-      drainQueue(null, accessToken);
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-      return api(originalRequest);
-    } catch (refreshError) {
-      drainQueue(refreshError, null);
-      forceLogout();
-      return Promise.reject(refreshError);
-    } finally {
-      isRefreshing = false;
-    }
-  }
 );
+
+// Renew the access token a little before it expires, and straight away when the
+// tab comes back into view or the device reconnects. Without this the first tap
+// after a phone wakes up hits an expired token while the network is still waking.
+const RENEW_BEFORE_MS = 2 * 60 * 1000;
+let keepAliveStarted = false;
+
+const renewIfDue = () => {
+  if (!loadRefreshToken() || document.visibilityState !== 'visible' || !navigator.onLine) return;
+  const expiry = getTokenExpiry();
+  if (getToken() && expiry && expiry - Date.now() > RENEW_BEFORE_MS) return;
+  refreshSession().catch((err) => {
+    if (err instanceof SessionExpiredError) forceLogout();
+    // Anything else: try again on the next tick, focus or reconnect.
+  });
+};
+
+export const startSessionKeepAlive = () => {
+  if (keepAliveStarted) return;
+  keepAliveStarted = true;
+  setInterval(renewIfDue, 60 * 1000);
+  document.addEventListener('visibilitychange', renewIfDue);
+  window.addEventListener('online', renewIfDue);
+  window.addEventListener('focus', renewIfDue);
+};
 
 // Auth APIs
 export const authAPI = {
@@ -279,7 +307,7 @@ export const fileAPI = {
 
   // Get presigned URL
   getPresignedUrl: (attachmentId, expirationMinutes = 60) =>
-    api.get(`/api/files/${attachmentId}/presigned`, { params: { expirationMinutes } }),
+      api.get(`/api/files/${attachmentId}/presigned`, { params: { expirationMinutes } }),
 
   // Delete attachment
   delete: (attachmentId) => api.delete(`/api/files/${attachmentId}`),
