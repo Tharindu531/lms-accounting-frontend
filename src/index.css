@@ -24,7 +24,7 @@
    text-ink-2, border-line, bg-brand ...), never raw palette colours,
    so light and dark come from this one place.
    ------------------------------------------------------------------ */
-:root {
+:root, .pdf-light {
   --paper: #f5f7fb;          /* page background: a cool exercise-book page */
   --surface: #ffffff;        /* panels */
   --sunken: #eef1f7;         /* inputs, hovered rows, tracks */

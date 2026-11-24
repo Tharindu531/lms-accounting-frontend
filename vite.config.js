@@ -36,7 +36,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2,webp,png,svg}'],
         // Only the font subsets this app uses (Latin and Sinhala); others load on demand if ever needed.
-        globIgnores: ['**/*-cyrillic-*', '**/*-greek-*', '**/*-vietnamese-*', '**/noto-sans-sinhala-latin*', '**/*-hero-*'],
+        globIgnores: ['**/*-cyrillic-*', '**/*-greek-*', '**/*-vietnamese-*', '**/noto-sans-sinhala-latin*', '**/*-hero-*',
+          // The PDF download (jsPDF and the pieces it loads) is fetched only when someone
+          // taps "Download PDF", so it isn't added to every install.
+          '**/quizPdf-*', '**/html2canvas*', '**/purify.es-*', '**/index.es-*'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
         cleanupOutdatedCaches: true,

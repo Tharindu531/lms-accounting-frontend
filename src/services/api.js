@@ -157,6 +157,9 @@ export const quizAPI = {
   saveDraft: (quizId, answers) => api.put(`/api/quizzes/${quizId}/draft`, { answers }),
   getMyResults: () => api.get('/api/quizzes/my-results'),
   getMyQuizResult: (quizId) => api.get(`/api/quizzes/my-results/${quizId}`),
+  // Staff: who attempted a quiz, and one student's answer sheet once the quiz has closed for them
+  getSubmissions: (quizId) => api.get(`/api/quizzes/admin/${quizId}/submissions`),
+  getSubmissionAnswers: (quizMarksId) => api.get(`/api/quizzes/admin/submissions/${quizMarksId}`),
   // Admin
   getAllAdmin: () => api.get('/api/quizzes/admin/all'),
   create: (data) => api.post('/api/quizzes', data),

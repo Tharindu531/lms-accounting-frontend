@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   FileQuestion, Plus, Pencil, Trash2, Copy, Eye, Wand2, ArrowUp, ArrowDown, GripVertical, ChevronLeft, Lock, Paperclip, PenLine, CheckCircle2,
-  Library, Dices,
+  Library, Dices, Users,
 } from 'lucide-react';
 import { quizAPI, unitAPI } from '../../services/api';
 import { unwrap } from '../../lib/queryClient';
@@ -21,6 +21,7 @@ import BankPicker from '../../components/admin/BankPicker';
 import RandomDrawDialog, { DrawSettings } from '../../components/admin/RandomDrawDialog';
 import QuestionEditor from '../../components/admin/QuestionEditor';
 import QuizPlayer from '../../components/quiz/QuizPlayer';
+import QuizSubmissions from '../../components/admin/QuizSubmissions';
 import { cn } from '../../lib/cn';
 import { OPTION_KEYS, optionLabel } from '../../lib/options';
 
@@ -142,6 +143,7 @@ const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetail
   const [preview, setPreview] = useState(false);
   const [order, setOrder] = useState(null);       // optimistic order of ids while saving
   const [dragIndex, setDragIndex] = useState(null);
+  const [submissions, setSubmissions] = useState(false);
   const locked = (quiz.attemptCount ?? 0) > 0;
   const state = summary(quiz);
   const unitLabel = useMemo(() => new Map(unitTree(units).map((u) => [u.id, u.parentName ? `${u.parentName} › ${u.name}` : u.name])), [units]);
@@ -183,6 +185,7 @@ const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetail
     ...quiz, questions, serverTime: Date.now(), attemptDeadline: quiz.timeLimit ? Date.now() + quiz.timeLimit * 60000 : null,
   } : null), [preview, quiz, questions]);
 
+  if (submissions) return <QuizSubmissions quiz={quiz} onBack={() => setSubmissions(false)} />;
   if (previewQuiz) return <QuizPlayer preview quiz={previewQuiz} user={null} onExit={() => setPreview(false)} onSubmitted={() => { setPreview(false); toast('Preview finished. Nothing was submitted.'); }} />;
 
   return (
@@ -198,6 +201,9 @@ const QuizBuilder = ({ quiz, units, onBack, onChanged, onDuplicate, onEditDetail
           {!state.same && <WindowLine sum={state} className="mt-1 text-sm text-ink-3 space-y-0.5" />}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" icon={Users} disabled={!quiz.attemptCount} onClick={() => setSubmissions(true)}>
+            Submissions{quiz.attemptCount ? ` (${quiz.attemptCount})` : ''}
+          </Button>
           <Button variant="secondary" icon={Eye} disabled={!questions.length} onClick={() => setPreview(true)}>Preview as student</Button>
           <Button variant="secondary" icon={Pencil} onClick={onEditDetails}>Edit details</Button>
           <Button variant="secondary" icon={Copy} onClick={onDuplicate}>Duplicate</Button>
