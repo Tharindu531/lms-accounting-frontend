@@ -176,7 +176,9 @@
   .scroll-thin::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 
   .youtube-container { position: relative; aspect-ratio: 16 / 9; overflow: hidden; }
-  .youtube-container iframe, .youtube-container > div { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* Only YouTube's frame and its wrapper fill the box; the player's own layers size themselves. */
+  .youtube-container iframe, .youtube-container > div:first-child { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .lesson-player iframe { pointer-events: none; }
 }
 
 @keyframes skeleton-pulse { 50% { opacity: 0.55; } }
